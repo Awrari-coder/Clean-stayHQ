@@ -180,6 +180,27 @@ export function useAdminStats() {
   });
 }
 
+export function useAdminAnalytics() {
+  return useQuery({
+    queryKey: ["admin", "analytics"],
+    queryFn: () => fetchJson<{
+      cleanerPerformance: any[];
+      revenueAnalytics: {
+        totalBookingRevenue: string;
+        totalCleaningCosts: string;
+        grossProfit: string;
+        profitMargin: string;
+        avgRevenuePerBooking: string;
+        avgCleaningCost: string;
+      };
+      jobProfitAnalysis: any[];
+      monthlyRevenue: { month: string; revenue: string }[];
+      pendingPayouts: number;
+      totalPayoutsPending: string;
+    }>(`${API_BASE}/admin/analytics`),
+  });
+}
+
 export function useAdminPayouts() {
   return useQuery({
     queryKey: ["admin", "payouts"],

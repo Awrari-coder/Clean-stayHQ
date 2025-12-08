@@ -5,6 +5,9 @@ import {
   cleanerJobs, 
   payments,
   syncLogs,
+  jobPhotos,
+  cleaningChecklists,
+  checklistCompletions,
   type User, 
   type InsertUser,
   type Property,
@@ -17,6 +20,12 @@ import {
   type InsertPayment,
   type SyncLog,
   type InsertSyncLog,
+  type JobPhoto,
+  type InsertJobPhoto,
+  type CleaningChecklist,
+  type InsertCleaningChecklist,
+  type ChecklistCompletion,
+  type InsertChecklistCompletion,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -76,6 +85,15 @@ export interface IStorage {
     completedJobs: number;
     totalJobs: number;
   }>;
+  
+  // Job Photos
+  addJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto>;
+  getJobPhotos(jobId: number): Promise<JobPhoto[]>;
+  
+  // Checklists
+  getChecklistForJob(jobId: number): Promise<CleaningChecklist | null>;
+  getChecklistCompletion(jobId: number): Promise<ChecklistCompletion | null>;
+  saveChecklistCompletion(data: InsertChecklistCompletion): Promise<ChecklistCompletion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -220,6 +238,7 @@ export class DatabaseStorage implements IStorage {
       payoutAmount: cleanerJobs.payoutAmount,
       scheduledDate: cleanerJobs.scheduledDate,
       checklist: cleanerJobs.checklist,
+      notes: cleanerJobs.notes,
       completedAt: cleanerJobs.completedAt,
       createdAt: cleanerJobs.createdAt,
       propertyName: properties.name,
@@ -244,6 +263,7 @@ export class DatabaseStorage implements IStorage {
       payoutAmount: cleanerJobs.payoutAmount,
       scheduledDate: cleanerJobs.scheduledDate,
       checklist: cleanerJobs.checklist,
+      notes: cleanerJobs.notes,
       completedAt: cleanerJobs.completedAt,
       createdAt: cleanerJobs.createdAt,
       propertyName: properties.name,
@@ -403,6 +423,56 @@ export class DatabaseStorage implements IStorage {
       completedJobs,
       totalJobs: jobs.length,
     };
+  }
+  
+  // Job Photos
+  async addJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto> {
+    const [newPhoto] = await db.insert(jobPhotos).values(photo).returning();
+    return newPhoto;
+  }
+  
+  async getJobPhotos(jobId: number): Promise<JobPhoto[]> {
+    return await db.select().from(jobPhotos)
+      .where(eq(jobPhotos.jobId, jobId))
+      .orderBy(desc(jobPhotos.createdAt));
+  }
+  
+  // Checklists
+  async getChecklistForJob(jobId: number): Promise<CleaningChecklist | null> {
+    const job = await this.getCleanerJob(jobId);
+    if (!job) return null;
+    
+    const booking = await this.getBooking(job.bookingId);
+    if (!booking) return null;
+    
+    const [checklist] = await db.select().from(cleaningChecklists)
+      .where(eq(cleaningChecklists.propertyId, booking.propertyId))
+      .limit(1);
+    
+    return checklist || null;
+  }
+  
+  async getChecklistCompletion(jobId: number): Promise<ChecklistCompletion | null> {
+    const [completion] = await db.select().from(checklistCompletions)
+      .where(eq(checklistCompletions.jobId, jobId))
+      .limit(1);
+    
+    return completion || null;
+  }
+  
+  async saveChecklistCompletion(data: InsertChecklistCompletion): Promise<ChecklistCompletion> {
+    const existing = await this.getChecklistCompletion(data.jobId);
+    
+    if (existing) {
+      const [updated] = await db.update(checklistCompletions)
+        .set({ completedItems: data.completedItems, completedAt: new Date() })
+        .where(eq(checklistCompletions.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [completion] = await db.insert(checklistCompletions).values(data).returning();
+    return completion;
   }
 }
 

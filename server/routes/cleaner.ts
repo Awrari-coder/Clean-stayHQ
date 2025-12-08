@@ -131,4 +131,169 @@ router.get("/stats", async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/cleaner/jobs/:id/photos - Upload photo for a job
+router.post("/jobs/:id/photos", async (req: AuthRequest, res) => {
+  try {
+    const jobId = parseInt(req.params.id);
+    const { type, url, caption } = req.body;
+    
+    if (!type || !url) {
+      return res.status(400).json({ error: "Photo type and URL are required" });
+    }
+    
+    if (!['before', 'after'].includes(type)) {
+      return res.status(400).json({ error: "Photo type must be 'before' or 'after'" });
+    }
+    
+    const job = await storage.getCleanerJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    
+    const isOwner = 
+      (req.user!.role === "cleaner" && job.assignedCleanerId === req.user!.id) ||
+      (req.user!.role === "cleaning_company" && job.assignedCompanyId === (req.user!.companyId || req.user!.id));
+    
+    if (!isOwner) {
+      return res.status(403).json({ error: "You don't have permission to upload photos for this job" });
+    }
+    
+    const photo = await storage.addJobPhoto({
+      jobId,
+      cleanerId: req.user!.id,
+      type,
+      url,
+      caption: caption || null,
+    });
+    
+    res.status(201).json(photo);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to upload photo" });
+  }
+});
+
+// GET /api/cleaner/jobs/:id/photos - Get photos for a job
+router.get("/jobs/:id/photos", async (req: AuthRequest, res) => {
+  try {
+    const jobId = parseInt(req.params.id);
+    
+    const job = await storage.getCleanerJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    
+    const isOwner = 
+      (req.user!.role === "cleaner" && job.assignedCleanerId === req.user!.id) ||
+      (req.user!.role === "cleaning_company" && job.assignedCompanyId === (req.user!.companyId || req.user!.id));
+    
+    if (!isOwner) {
+      return res.status(403).json({ error: "You don't have permission to view photos for this job" });
+    }
+    
+    const photos = await storage.getJobPhotos(jobId);
+    res.json(photos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch photos" });
+  }
+});
+
+// GET /api/cleaner/jobs/:id/checklist - Get checklist for a job's property
+router.get("/jobs/:id/checklist", async (req: AuthRequest, res) => {
+  try {
+    const jobId = parseInt(req.params.id);
+    const job = await storage.getCleanerJob(jobId);
+    
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    
+    const isOwner = 
+      (req.user!.role === "cleaner" && job.assignedCleanerId === req.user!.id) ||
+      (req.user!.role === "cleaning_company" && job.assignedCompanyId === (req.user!.companyId || req.user!.id));
+    
+    if (!isOwner) {
+      return res.status(403).json({ error: "You don't have permission to view the checklist for this job" });
+    }
+    
+    const checklist = await storage.getChecklistForJob(jobId);
+    const completion = await storage.getChecklistCompletion(jobId);
+    
+    res.json({
+      checklist,
+      completion,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch checklist" });
+  }
+});
+
+// POST /api/cleaner/jobs/:id/checklist/complete - Save checklist completion
+router.post("/jobs/:id/checklist/complete", async (req: AuthRequest, res) => {
+  try {
+    const jobId = parseInt(req.params.id);
+    const { checklistId, completedItems } = req.body;
+    
+    const job = await storage.getCleanerJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    
+    const isOwner = 
+      (req.user!.role === "cleaner" && job.assignedCleanerId === req.user!.id) ||
+      (req.user!.role === "cleaning_company" && job.assignedCompanyId === (req.user!.companyId || req.user!.id));
+    
+    if (!isOwner) {
+      return res.status(403).json({ error: "You don't have permission to complete this checklist" });
+    }
+    
+    const completion = await storage.saveChecklistCompletion({
+      jobId,
+      checklistId,
+      completedItems,
+    });
+    
+    res.json(completion);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to save checklist completion" });
+  }
+});
+
+// GET /api/cleaner/earnings-projection - Get earnings projection
+router.get("/earnings-projection", async (req: AuthRequest, res) => {
+  try {
+    const jobs = await storage.getJobsByCleaner(req.user!.id);
+    const stats = await storage.getCleanerStats(req.user!.id);
+    
+    const pendingJobs = jobs.filter(j => j.status !== "completed");
+    const projectedEarnings = pendingJobs.reduce((sum, j) => sum + parseFloat(j.payoutAmount || "0"), 0);
+    
+    const avgJobValue = stats.completedJobs > 0 ? stats.totalEarnings / stats.completedJobs : 0;
+    
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dayOfMonth = now.getDate();
+    const remainingDays = daysInMonth - dayOfMonth;
+    
+    const avgJobsPerDay = stats.completedJobs > 0 ? stats.completedJobs / dayOfMonth : 0;
+    const projectedAdditionalJobs = Math.round(avgJobsPerDay * remainingDays);
+    const projectedMonthlyTotal = stats.totalEarnings + (projectedAdditionalJobs * avgJobValue);
+    
+    res.json({
+      currentEarnings: stats.totalEarnings,
+      pendingJobsValue: projectedEarnings,
+      upcomingJobs: pendingJobs.length,
+      avgJobValue: avgJobValue.toFixed(2),
+      projectedMonthlyTotal: projectedMonthlyTotal.toFixed(2),
+      projectedAdditionalJobs,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to calculate earnings projection" });
+  }
+});
+
 export default router;

@@ -84,6 +84,34 @@ export const syncLogs = pgTable('sync_logs', {
   timestamp: timestamp('timestamp').notNull().defaultNow(),
 });
 
+export const photoTypeEnum = pgEnum('photo_type', ['before', 'after']);
+
+export const jobPhotos = pgTable('job_photos', {
+  id: serial('id').primaryKey(),
+  jobId: integer('job_id').notNull().references(() => cleanerJobs.id),
+  cleanerId: integer('cleaner_id').notNull().references(() => users.id),
+  type: photoTypeEnum('type').notNull(),
+  url: text('url').notNull(),
+  caption: text('caption'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const cleaningChecklists = pgTable('cleaning_checklists', {
+  id: serial('id').primaryKey(),
+  propertyId: integer('property_id').notNull().references(() => properties.id),
+  name: text('name').notNull(),
+  items: jsonb('items').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const checklistCompletions = pgTable('checklist_completions', {
+  id: serial('id').primaryKey(),
+  jobId: integer('job_id').notNull().references(() => cleanerJobs.id),
+  checklistId: integer('checklist_id').notNull().references(() => cleaningChecklists.id),
+  completedItems: jsonb('completed_items').notNull(),
+  completedAt: timestamp('completed_at').notNull().defaultNow(),
+});
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -115,6 +143,21 @@ export const insertSyncLogSchema = createInsertSchema(syncLogs).omit({
   timestamp: true,
 });
 
+export const insertJobPhotoSchema = createInsertSchema(jobPhotos).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCleaningChecklistSchema = createInsertSchema(cleaningChecklists).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertChecklistCompletionSchema = createInsertSchema(checklistCompletions).omit({
+  id: true,
+  completedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -133,3 +176,12 @@ export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 
 export type SyncLog = typeof syncLogs.$inferSelect;
 export type InsertSyncLog = z.infer<typeof insertSyncLogSchema>;
+
+export type JobPhoto = typeof jobPhotos.$inferSelect;
+export type InsertJobPhoto = z.infer<typeof insertJobPhotoSchema>;
+
+export type CleaningChecklist = typeof cleaningChecklists.$inferSelect;
+export type InsertCleaningChecklist = z.infer<typeof insertCleaningChecklistSchema>;
+
+export type ChecklistCompletion = typeof checklistCompletions.$inferSelect;
+export type InsertChecklistCompletion = z.infer<typeof insertChecklistCompletionSchema>;

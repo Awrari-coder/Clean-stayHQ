@@ -5,7 +5,8 @@ import {
   Settings, 
   Brush,
   DollarSign,
-  Cog
+  Cog,
+  BarChart3
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,9 +42,10 @@ export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
 
   admin: [
     { label: "Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { label: "Users", href: "/admin/users", icon: Users },
-    { label: "System", href: "/admin/system", icon: Cog },
     { label: "Payouts", href: "/admin/payouts", icon: DollarSign },
+    { label: "System", href: "/admin/system", icon: Cog },
   ],
 };
 

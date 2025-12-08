@@ -88,6 +88,115 @@ router.get("/stats", async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/admin/analytics - Get comprehensive analytics data
+router.get("/analytics", async (req: AuthRequest, res) => {
+  try {
+    const users = await storage.getAllUsers();
+    const jobs = await storage.getAllJobs();
+    const bookings = await storage.getAllBookingsWithDetails();
+    const payouts = await getAllPayoutsWithDetails();
+    
+    const cleaners = users.filter(u => u.role === "cleaner" || u.role === "cleaning_company");
+    
+    // Cleaner performance metrics
+    const cleanerPerformance = cleaners.map(cleaner => {
+      const cleanerJobs = jobs.filter(j => j.assignedCleanerId === cleaner.id);
+      const completedJobs = cleanerJobs.filter(j => j.status === "completed");
+      const totalEarnings = completedJobs.reduce((sum, j) => sum + parseFloat(j.payoutAmount || "0"), 0);
+      const avgJobValue = completedJobs.length > 0 ? totalEarnings / completedJobs.length : 0;
+      
+      return {
+        id: cleaner.id,
+        name: cleaner.name,
+        email: cleaner.email,
+        totalJobs: cleanerJobs.length,
+        completedJobs: completedJobs.length,
+        pendingJobs: cleanerJobs.filter(j => j.status !== "completed").length,
+        completionRate: cleanerJobs.length > 0 ? Math.round((completedJobs.length / cleanerJobs.length) * 100) : 0,
+        totalEarnings: totalEarnings.toFixed(2),
+        avgJobValue: avgJobValue.toFixed(2),
+        performanceScore: calculatePerformanceScore(completedJobs.length, cleanerJobs.length),
+      };
+    }).sort((a, b) => b.performanceScore - a.performanceScore);
+    
+    // Revenue analytics
+    const totalBookingRevenue = bookings.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
+    const totalCleaningCosts = jobs
+      .filter(j => j.status === "completed")
+      .reduce((sum, j) => sum + parseFloat(j.payoutAmount || "0"), 0);
+    const grossProfit = totalBookingRevenue - totalCleaningCosts;
+    const profitMargin = totalBookingRevenue > 0 ? (grossProfit / totalBookingRevenue) * 100 : 0;
+    
+    // Job profit analysis
+    const jobProfitAnalysis = jobs
+      .filter(j => j.status === "completed")
+      .map(job => {
+        const booking = bookings.find(b => b.id === job.bookingId);
+        const bookingAmount = parseFloat(booking?.amount || "0");
+        const cleaningCost = parseFloat(job.payoutAmount || "0");
+        const profit = bookingAmount - cleaningCost;
+        const margin = bookingAmount > 0 ? (profit / bookingAmount) * 100 : 0;
+        
+        return {
+          jobId: job.id,
+          propertyName: booking?.property_name || "Unknown",
+          bookingRevenue: bookingAmount.toFixed(2),
+          cleaningCost: cleaningCost.toFixed(2),
+          profit: profit.toFixed(2),
+          margin: margin.toFixed(1),
+        };
+      });
+    
+    // Monthly revenue trend (last 6 months)
+    const now = new Date();
+    const monthlyRevenue = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      const monthName = monthStart.toLocaleDateString('en-US', { month: 'short' });
+      
+      const monthBookings = bookings.filter(b => {
+        const checkIn = new Date(b.check_in);
+        return checkIn >= monthStart && checkIn <= monthEnd;
+      });
+      
+      const revenue = monthBookings.reduce((sum, b) => sum + parseFloat(b.amount || "0"), 0);
+      monthlyRevenue.push({ month: monthName, revenue: revenue.toFixed(2) });
+    }
+    
+    res.json({
+      cleanerPerformance,
+      revenueAnalytics: {
+        totalBookingRevenue: totalBookingRevenue.toFixed(2),
+        totalCleaningCosts: totalCleaningCosts.toFixed(2),
+        grossProfit: grossProfit.toFixed(2),
+        profitMargin: profitMargin.toFixed(1),
+        avgRevenuePerBooking: bookings.length > 0 ? (totalBookingRevenue / bookings.length).toFixed(2) : "0.00",
+        avgCleaningCost: jobs.filter(j => j.status === "completed").length > 0 
+          ? (totalCleaningCosts / jobs.filter(j => j.status === "completed").length).toFixed(2) 
+          : "0.00",
+      },
+      jobProfitAnalysis: jobProfitAnalysis.slice(0, 10),
+      monthlyRevenue,
+      pendingPayouts: payouts.filter(p => p.status === "pending").length,
+      totalPayoutsPending: payouts
+        .filter(p => p.status === "pending")
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0)
+        .toFixed(2),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
+function calculatePerformanceScore(completed: number, total: number): number {
+  if (total === 0) return 0;
+  const completionRate = completed / total;
+  const volumeBonus = Math.min(completed / 10, 1);
+  return Math.round((completionRate * 70) + (volumeBonus * 30));
+}
+
 // GET /api/admin/payouts - Get all payouts with details
 router.get("/payouts", async (req: AuthRequest, res) => {
   try {

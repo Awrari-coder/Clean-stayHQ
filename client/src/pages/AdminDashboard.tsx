@@ -3,8 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle, Settings, Bell, Loader2, DollarSign } from "lucide-react";
-import { useAdminUsers, useAdminIntegrations, useAdminStats, useAdminPayouts, useMarkPayoutPaid } from "@/hooks/useApi";
+import { AlertCircle, CheckCircle, Settings, Bell, Loader2, DollarSign, TrendingUp, Users as UsersIcon, BarChart3, Award } from "lucide-react";
+import { useAdminUsers, useAdminIntegrations, useAdminStats, useAdminPayouts, useMarkPayoutPaid, useAdminAnalytics } from "@/hooks/useApi";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -153,6 +154,188 @@ function SystemSection() {
   );
 }
 
+function AnalyticsSection() {
+  const { data: analytics, isLoading } = useAdminAnalytics();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const revenue = analytics?.revenueAnalytics;
+  const cleaners = analytics?.cleanerPerformance || [];
+  const jobAnalysis = analytics?.jobProfitAnalysis || [];
+  const monthlyData = analytics?.monthlyRevenue || [];
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+      
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Total Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${revenue?.totalBookingRevenue || '0.00'}</div>
+            <p className="text-xs opacity-80 mt-1">From all bookings</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Cleaning Costs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${revenue?.totalCleaningCosts || '0.00'}</div>
+            <p className="text-xs opacity-80 mt-1">Paid to cleaners</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Gross Profit</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${revenue?.grossProfit || '0.00'}</div>
+            <p className="text-xs opacity-80 mt-1">{revenue?.profitMargin || '0'}% margin</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Pending Payouts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${analytics?.totalPayoutsPending || '0.00'}</div>
+            <p className="text-xs opacity-80 mt-1">{analytics?.pendingPayouts || 0} awaiting payment</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-none shadow-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5" /> Cleaner Performance
+            </CardTitle>
+            <CardDescription>Rankings based on completion rate and volume</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cleaners.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No cleaner data yet</div>
+            ) : (
+              <div className="space-y-4">
+                {cleaners.slice(0, 5).map((cleaner: any, idx: number) => (
+                  <div key={cleaner.id} className="flex items-center gap-4">
+                    <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white font-bold text-sm ${
+                      idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-gray-400' : idx === 2 ? 'bg-amber-600' : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-medium truncate">{cleaner.name}</p>
+                        <span className="text-sm font-bold">{cleaner.performanceScore}pts</span>
+                      </div>
+                      <Progress value={cleaner.performanceScore} className="h-2" />
+                      <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                        <span>{cleaner.completedJobs} jobs</span>
+                        <span>{cleaner.completionRate}% complete</span>
+                        <span>${cleaner.totalEarnings} earned</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" /> Monthly Revenue
+            </CardTitle>
+            <CardDescription>Last 6 months trend</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {monthlyData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No revenue data yet</div>
+            ) : (
+              <div className="space-y-3">
+                {monthlyData.map((month: any) => {
+                  const maxRevenue = Math.max(...monthlyData.map((m: any) => parseFloat(m.revenue) || 1));
+                  const percentage = (parseFloat(month.revenue) / maxRevenue) * 100;
+                  return (
+                    <div key={month.month} className="flex items-center gap-3">
+                      <span className="w-10 text-sm text-muted-foreground">{month.month}</span>
+                      <div className="flex-1 bg-muted rounded-full h-6 overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full flex items-center justify-end px-2"
+                          style={{ width: `${Math.max(percentage, 5)}%` }}
+                        >
+                          <span className="text-xs font-medium text-primary-foreground">${month.revenue}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-none shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" /> Job Profit Analysis
+          </CardTitle>
+          <CardDescription>Revenue vs cleaning costs per completed job</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {jobAnalysis.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No completed jobs to analyze</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Property</TableHead>
+                  <TableHead className="text-right">Booking Revenue</TableHead>
+                  <TableHead className="text-right">Cleaning Cost</TableHead>
+                  <TableHead className="text-right">Profit</TableHead>
+                  <TableHead className="text-right">Margin</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobAnalysis.map((job: any) => (
+                  <TableRow key={job.jobId}>
+                    <TableCell className="font-medium">{job.propertyName}</TableCell>
+                    <TableCell className="text-right">${job.bookingRevenue}</TableCell>
+                    <TableCell className="text-right text-orange-600">${job.cleaningCost}</TableCell>
+                    <TableCell className={`text-right font-bold ${parseFloat(job.profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ${job.profit}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={parseFloat(job.margin) >= 50 ? 'default' : 'outline'}>
+                        {job.margin}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function PayoutsSection() {
   const { data: payouts = [], isLoading, refetch } = useAdminPayouts();
   const markPaid = useMarkPayoutPaid();
@@ -272,6 +455,7 @@ export default function AdminDashboard() {
   const { data: stats } = useAdminStats();
 
   const getSection = () => {
+    if (location.startsWith('/admin/analytics')) return 'analytics';
     if (location.startsWith('/admin/users')) return 'users';
     if (location.startsWith('/admin/system')) return 'system';
     if (location.startsWith('/admin/payouts')) return 'payouts';
@@ -302,6 +486,8 @@ export default function AdminDashboard() {
 
   const renderSection = () => {
     switch (section) {
+      case 'analytics':
+        return <AnalyticsSection />;
       case 'users':
         return <UsersSection />;
       case 'system':
