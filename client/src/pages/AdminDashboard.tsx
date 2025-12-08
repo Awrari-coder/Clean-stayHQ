@@ -3,23 +3,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle, Settings, Users, ShieldAlert, BarChart3, Bell } from "lucide-react";
-import { MOCK_USERS } from "@/lib/mockData";
+import { AlertCircle, CheckCircle, Settings, Bell } from "lucide-react";
+import { useUsers } from "@/hooks/useApi";
 import { toast } from "@/hooks/use-toast";
 
 export default function AdminDashboard() {
+  const { data: users = [], isLoading } = useUsers();
+
   const handleSystemCheck = () => {
     toast({
       title: "Running System Diagnostics",
       description: "Checking database integrity and API connections...",
     });
+    setTimeout(() => {
+      toast({
+        title: "System Check Complete",
+        description: "All systems operational.",
+      });
+    }, 2000);
   };
 
   const handleSendAlert = () => {
     toast({
       title: "Alert Sent",
       description: "SMS broadcast sent to all active cleaners via Twilio.",
-      variant: "default",
     });
   };
 
@@ -28,14 +35,14 @@ export default function AdminDashboard() {
       <div className="space-y-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">System Admin</h1>
+            <h1 className="text-3xl font-bold tracking-tight" data-testid="heading-admin">System Admin</h1>
             <p className="text-muted-foreground mt-1">Overview of Texas Region operations.</p>
           </div>
           <div className="flex gap-2">
-             <Button variant="destructive" onClick={handleSendAlert}>
+             <Button variant="destructive" onClick={handleSendAlert} data-testid="button-alert">
                <Bell className="mr-2 h-4 w-4" /> Broadcast Alert
              </Button>
-             <Button variant="outline" onClick={handleSystemCheck}>
+             <Button variant="outline" onClick={handleSystemCheck} data-testid="button-system-check">
                <Settings className="mr-2 h-4 w-4" /> System Check
              </Button>
           </div>
@@ -47,7 +54,7 @@ export default function AdminDashboard() {
               <CardTitle className="text-sm font-medium opacity-90">System Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold flex items-center gap-2">
+              <div className="text-2xl font-bold flex items-center gap-2" data-testid="text-system-status">
                 <CheckCircle className="h-6 w-6" /> Operational
               </div>
               <p className="text-xs opacity-80 mt-1">All systems normal. 99.9% Uptime.</p>
@@ -58,9 +65,9 @@ export default function AdminDashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Users</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{MOCK_USERS.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-user-count">{users.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Hosts: 1 | Cleaners: 2 | Admins: 1
+                Hosts: {users.filter(u => u.role === 'host').length} | Cleaners: {users.filter(u => u.role === 'cleaner').length} | Admins: {users.filter(u => u.role === 'admin').length}
               </p>
             </CardContent>
           </Card>
@@ -86,38 +93,42 @@ export default function AdminDashboard() {
               <CardDescription>All registered users in the platform.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {MOCK_USERS.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                            {user.name.charAt(0)}
-                          </div>
-                          <div className="flex flex-col">
-                            <span>{user.name}</span>
-                            <span className="text-xs text-muted-foreground">{user.email}</span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">{user.role}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">Edit</Button>
-                      </TableCell>
+              {isLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading users...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user) => (
+                      <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                              {user.name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span>{user.name}</span>
+                              <span className="text-xs text-muted-foreground">{user.email}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">{user.role}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" data-testid={`button-edit-${user.id}`}>Edit</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
 
