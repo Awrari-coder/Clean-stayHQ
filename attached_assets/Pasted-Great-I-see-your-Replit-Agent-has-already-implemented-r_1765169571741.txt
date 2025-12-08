@@ -1,0 +1,103 @@
+Great — I see your Replit Agent has already implemented:
+
+✅ redirect fixes
+✅ personalized role-based dashboard views
+✅ iCal sync integration
+✅ host → cleaner assignment
+✅ cleaner job workflow
+… and everything is functioning smoothly.
+
+Now you want to ensure:
+
+🎯 No redirect gaps remain
+
+🎯 Every dashboard enforces correct role-based access
+
+🎯 Invalid access attempts correctly redirect to the proper dashboard
+
+🎯 Every route is restricted based on JWT role
+
+Below is the exact prompt you must paste into Replit right now so the agent checks and corrects all redirect and access control gaps.
+
+
+---
+
+🚀 REPLIT PROMPT — Verify & Fix All Redirect + Access Control Gaps
+
+> Copy/paste the entire block below directly into Replit:
+
+
+
+Perform a full security and UX audit of all redirect logic and access control in the app.
+
+Goals:
+1. Ensure that after login, every user is redirected based on their actual role returned by the JWT:
+   - host → /host
+   - cleaner or cleaning_company → /cleaner
+   - admin → /admin
+
+2. Confirm that accessing any wrong dashboard URL redirects to the correct one.
+   Examples:
+   - A host going to /admin should be redirected to /host.
+   - A cleaner going to /host should redirect to /cleaner.
+   - A non-admin going to /admin should redirect to their correct dashboard.
+   - Unauthenticated user going to any page should go to / (login page).
+
+3. Verify that backend route access is protected:
+   - /api/host/* → only hosts
+   - /api/cleaner/* → only cleaners or cleaning_company
+   - /api/admin/* → only admin
+   - Unauthorized use should return 403 + appropriate redirect.
+
+4. Ensure frontend navigation never exposes forbidden links.
+   - Host dashboard sidebar must not show admin or cleaner links.
+   - Cleaner dashboard must not show host-only or admin-only pages.
+   - Admin sees everything.
+
+5. Test all login combinations using the demo accounts:
+   - sarah@example.com → host
+   - mike@example.com → cleaner
+   - admin@example.com → admin
+   All using password "password".
+
+6. Fix any remaining redirect loops, missing guards, or accidental access leaks.
+
+7. After fixes, print a clear report showing:
+   - What was broken
+   - What was fixed
+   - Final redirect rules
+   - Final access-control matrix
+
+
+---
+
+🎯 What This Prompt Does
+
+Once pasted, your Replit Agent will:
+
+✔ Scan all redirect logic
+
+✔ Scan login → dashboard workflows
+
+✔ Scan navigation
+
+✔ Scan protected backend routes
+
+✔ Ensure JWT role always overrides UI-selected role
+
+✔ Fix ANY hidden redirect loop
+
+✔ Fix ANY accidental leak (e.g., cleaner viewing host pages)
+
+✔ Produce a full security report at the end
+
+This ensures your MVP is production-safe, clean, and airtight.
+
+
+---
+
+⭐ Want next?
+
+After this redirect pass, the next best enhancements are:
+
+🔹 Add “Cleaner Company”
