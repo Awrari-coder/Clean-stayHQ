@@ -1,23 +1,69 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Shield, Star, DollarSign } from "lucide-react";
+import { Check, Shield, Star, DollarSign, Loader2 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { toast } from "@/hooks/use-toast";
 import heroImage from '@assets/generated_images/modern_clean_vacation_rental_living_room.png';
 
 export default function Login() {
   const [_, setLocation] = useLocation();
+  const { login, isAuthenticated, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleLogin = (role: string) => {
+  // Redirect if already logged in
+  if (isAuthenticated && user) {
+    const dashboardPath = user.role === "admin" ? "/admin" : user.role === "cleaner" ? "/cleaner" : "/host";
+    setLocation(dashboardPath);
+    return null;
+  }
+
+  const handleLogin = async (e: React.FormEvent, role: string) => {
+    e.preventDefault();
     setIsLoading(true);
-    // Simulate network delay
-    setTimeout(() => {
-      setLocation(`/${role}`);
-    }, 800);
+
+    const result = await login(email, password);
+    
+    if (result.success) {
+      toast({
+        title: "Welcome back!",
+        description: "Successfully logged in.",
+      });
+      // Redirect based on role
+      const dashboardPath = role === "admin" ? "/admin" : role === "cleaner" ? "/cleaner" : "/host";
+      setLocation(dashboardPath);
+    } else {
+      toast({
+        title: "Login failed",
+        description: result.error || "Please check your credentials.",
+        variant: "destructive",
+      });
+    }
+    
+    setIsLoading(false);
+  };
+
+  const setDemoCredentials = (role: string) => {
+    switch (role) {
+      case "host":
+        setEmail("sarah@example.com");
+        setPassword("password");
+        break;
+      case "cleaner":
+        setEmail("mike@example.com");
+        setPassword("password");
+        break;
+      case "admin":
+        setEmail("admin@example.com");
+        setPassword("password");
+        break;
+    }
   };
 
   return (
@@ -36,33 +82,55 @@ export default function Login() {
             <p className="text-muted-foreground">Manage your properties and cleanings with ease.</p>
           </div>
 
-          <Tabs defaultValue="host" className="w-full">
+          <Tabs defaultValue="host" className="w-full" onValueChange={setDemoCredentials}>
             <TabsList className="grid w-full grid-cols-3 mb-8">
-              <TabsTrigger value="host">Host</TabsTrigger>
-              <TabsTrigger value="cleaner">Cleaner</TabsTrigger>
-              <TabsTrigger value="admin">Admin</TabsTrigger>
+              <TabsTrigger value="host" data-testid="tab-host">Host</TabsTrigger>
+              <TabsTrigger value="cleaner" data-testid="tab-cleaner">Cleaner</TabsTrigger>
+              <TabsTrigger value="admin" data-testid="tab-admin">Admin</TabsTrigger>
             </TabsList>
 
             {["host", "cleaner", "admin"].map((role) => (
               <TabsContent key={role} value={role}>
                 <Card className="border-none shadow-none">
-                  <form onSubmit={(e) => { e.preventDefault(); handleLogin(role); }}>
+                  <form onSubmit={(e) => handleLogin(e, role)}>
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor={`${role}-email`}>Email</Label>
                         <Input 
-                          id={`${role}-email`} 
-                          placeholder={`name@example.com`} 
-                          defaultValue={role === 'host' ? 'sarah@example.com' : role === 'cleaner' ? 'mike@example.com' : 'admin@example.com'}
-                          required 
+                          id={`${role}-email`}
+                          type="email"
+                          placeholder="name@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          data-testid={`input-email-${role}`}
                         />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor={`${role}-password`}>Password</Label>
-                        <Input id={`${role}-password`} type="password" defaultValue="password" required />
+                        <Input 
+                          id={`${role}-password`} 
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          data-testid={`input-password-${role}`}
+                        />
                       </div>
-                      <Button className="w-full font-medium" type="submit" disabled={isLoading}>
-                        {isLoading ? "Signing in..." : `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
+                      <Button 
+                        className="w-full font-medium" 
+                        type="submit" 
+                        disabled={isLoading}
+                        data-testid={`button-login-${role}`}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Signing in...
+                          </>
+                        ) : (
+                          `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}`
+                        )}
                       </Button>
                     </div>
                   </form>
@@ -71,8 +139,11 @@ export default function Login() {
             ))}
           </Tabs>
 
-          <div className="pt-6 border-t text-center text-sm text-muted-foreground">
-            <p>Protected by reCAPTCHA and subject to the Privacy Policy and Terms of Service.</p>
+          <div className="pt-4 text-center text-sm text-muted-foreground">
+            <p className="font-medium mb-2">Demo Accounts (password: "password"):</p>
+            <p>Host: sarah@example.com</p>
+            <p>Cleaner: mike@example.com</p>
+            <p>Admin: admin@example.com</p>
           </div>
         </div>
       </div>

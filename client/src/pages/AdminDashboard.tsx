@@ -3,12 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle, Settings, Bell } from "lucide-react";
-import { useUsers } from "@/hooks/useApi";
+import { AlertCircle, CheckCircle, Settings, Bell, Loader2 } from "lucide-react";
+import { useAdminUsers, useAdminIntegrations, useAdminStats } from "@/hooks/useApi";
+import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 
 export default function AdminDashboard() {
-  const { data: users = [], isLoading } = useUsers();
+  const { user } = useAuth();
+  const { data: users = [], isLoading } = useAdminUsers();
+  const { data: integrations } = useAdminIntegrations();
+  const { data: stats } = useAdminStats();
 
   const handleSystemCheck = () => {
     toast({
@@ -36,7 +40,7 @@ export default function AdminDashboard() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight" data-testid="heading-admin">System Admin</h1>
-            <p className="text-muted-foreground mt-1">Overview of Texas Region operations.</p>
+            <p className="text-muted-foreground mt-1">Welcome, {user?.name}. Overview of Texas Region operations.</p>
           </div>
           <div className="flex gap-2">
              <Button variant="destructive" onClick={handleSendAlert} data-testid="button-alert">
@@ -65,22 +69,22 @@ export default function AdminDashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Users</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-user-count">{users.length}</div>
+              <div className="text-2xl font-bold" data-testid="text-user-count">{stats?.totalUsers ?? users.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Hosts: {users.filter(u => u.role === 'host').length} | Cleaners: {users.filter(u => u.role === 'cleaner').length} | Admins: {users.filter(u => u.role === 'admin').length}
+                Hosts: {stats?.hostCount ?? 0} | Cleaners: {stats?.cleanerCount ?? 0} | Admins: {stats?.adminCount ?? 0}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Issues</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Jobs Overview</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold flex items-center gap-2 text-amber-600">
-                <AlertCircle className="h-6 w-6" /> 2
+              <div className="text-2xl font-bold flex items-center gap-2">
+                {stats?.totalJobs ?? 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Requires immediate attention
+                Pending: {stats?.pendingJobs ?? 0} | Completed: {stats?.completedJobs ?? 0}
               </p>
             </CardContent>
           </Card>
@@ -94,7 +98,9 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-8 text-muted-foreground">Loading users...</div>
+                <div className="text-center py-8 text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading users...
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -105,24 +111,24 @@ export default function AdminDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                    {users.map((u: any) => (
+                      <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                              {user.name.charAt(0)}
+                              {u.name?.charAt(0) || "?"}
                             </div>
                             <div className="flex flex-col">
-                              <span>{user.name}</span>
-                              <span className="text-xs text-muted-foreground">{user.email}</span>
+                              <span>{u.name}</span>
+                              <span className="text-xs text-muted-foreground">{u.email}</span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="capitalize">{user.role}</Badge>
+                          <Badge variant="outline" className="capitalize">{u.role}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" data-testid={`button-edit-${user.id}`}>Edit</Button>
+                          <Button variant="ghost" size="sm" data-testid={`button-edit-${u.id}`}>Edit</Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -145,7 +151,29 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <p className="font-medium">Airbnb Integration</p>
-                    <p className="text-sm text-muted-foreground">Connected • Syncing every 15m</p>
+                    <p className="text-sm text-muted-foreground">
+                      {integrations?.airbnb?.status === 'active' ? 'Connected' : 'Disconnected'} • Syncing every 15m
+                    </p>
+                  </div>
+                </div>
+                <Badge className={integrations?.airbnb?.status === 'active' 
+                  ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border-emerald-200"
+                  : "bg-red-500/15 text-red-600"
+                }>
+                  {integrations?.airbnb?.status === 'active' ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="bg-[#F22F46] text-white p-2 rounded-md">
+                     <div className="h-5 w-5 font-bold flex items-center justify-center text-xs">Tw</div>
+                  </div>
+                  <div>
+                    <p className="font-medium">Twilio SMS</p>
+                    <p className="text-sm text-muted-foreground">
+                      {integrations?.twilio?.status === 'active' ? 'Connected' : 'Disconnected'} • {integrations?.twilio?.messages_sent ?? 0} messages sent
+                    </p>
                   </div>
                 </div>
                 <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border-emerald-200">Active</Badge>
@@ -153,28 +181,17 @@ export default function AdminDashboard() {
 
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-4">
-                  <div className="bg-[#F22F46] text-white p-2 rounded-md">
-                     <div className="h-5 w-5 font-bold flex items-center justify-center">Tw</div>
-                  </div>
-                  <div>
-                    <p className="font-medium">Twilio SMS</p>
-                    <p className="text-sm text-muted-foreground">Connected • 420 messages sent</p>
-                  </div>
-                </div>
-                 <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border-emerald-200">Active</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-4">
                   <div className="bg-black text-white p-2 rounded-md">
-                    <div className="h-5 w-5 font-bold flex items-center justify-center">R</div>
+                    <div className="h-5 w-5 font-bold flex items-center justify-center text-xs">R</div>
                   </div>
                   <div>
                     <p className="font-medium">Resend Email</p>
-                    <p className="text-sm text-muted-foreground">Connected • 1,200 emails sent</p>
+                    <p className="text-sm text-muted-foreground">
+                      {integrations?.resend?.status === 'active' ? 'Connected' : 'Disconnected'} • {integrations?.resend?.emails_sent ?? 0} emails sent
+                    </p>
                   </div>
                 </div>
-                 <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border-emerald-200">Active</Badge>
+                <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border-emerald-200">Active</Badge>
               </div>
             </CardContent>
           </Card>

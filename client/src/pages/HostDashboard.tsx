@@ -3,16 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, MessageSquare } from "lucide-react";
-import { useBookings, useHostStats, useCreateSyncLog } from "@/hooks/useApi";
+import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, MessageSquare, Loader2 } from "lucide-react";
+import { useHostBookings, useHostStats, useHostSync } from "@/hooks/useApi";
+import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
 export default function HostDashboard() {
-  const hostId = 1; // Sarah Host
-  const { data: bookings = [], isLoading: bookingsLoading } = useBookings();
-  const { data: stats } = useHostStats(hostId);
-  const createSyncLog = useCreateSyncLog();
+  const { user } = useAuth();
+  const { data: bookings = [], isLoading: bookingsLoading } = useHostBookings();
+  const { data: stats } = useHostStats();
+  const syncMutation = useHostSync();
 
   const handleSync = () => {
     toast({
@@ -20,19 +21,21 @@ export default function HostDashboard() {
       description: "Fetching latest bookings and calendar updates from Texas region...",
     });
     
-    createSyncLog.mutate(
-      { source: "airbnb", status: "success", message: "Manual sync completed" },
-      {
-        onSuccess: () => {
-          setTimeout(() => {
-            toast({
-              title: "Sync Complete",
-              description: "Your calendar is up to date.",
-            });
-          }, 2000);
-        },
-      }
-    );
+    syncMutation.mutate(undefined, {
+      onSuccess: () => {
+        toast({
+          title: "Sync Complete",
+          description: "Your calendar is up to date.",
+        });
+      },
+      onError: () => {
+        toast({
+          title: "Sync Failed",
+          description: "Please try again later.",
+          variant: "destructive",
+        });
+      },
+    });
   };
 
   return (
@@ -41,11 +44,21 @@ export default function HostDashboard() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight" data-testid="heading-dashboard">Host Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Welcome back, Sarah. Here's what's happening in Texas today.</p>
+            <p className="text-muted-foreground mt-1">Welcome back, {user?.name}. Here's what's happening in Texas today.</p>
           </div>
           <div className="flex gap-2">
-             <Button variant="outline" onClick={handleSync} data-testid="button-sync">
-               <Calendar className="mr-2 h-4 w-4" /> Sync Calendar
+             <Button 
+               variant="outline" 
+               onClick={handleSync} 
+               disabled={syncMutation.isPending}
+               data-testid="button-sync"
+             >
+               {syncMutation.isPending ? (
+                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+               ) : (
+                 <Calendar className="mr-2 h-4 w-4" />
+               )}
+               Sync Calendar
              </Button>
              <Button className="bg-primary hover:bg-primary/90" data-testid="button-new-booking">
                <Home className="mr-2 h-4 w-4" /> New Booking
@@ -62,7 +75,7 @@ export default function HostDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-revenue">
-                ${stats?.totalRevenue.toLocaleString() ?? '0'}
+                ${stats?.totalRevenue?.toLocaleString() ?? '0'}
               </div>
               <p className="text-xs text-muted-foreground flex items-center mt-1">
                 <span className="text-emerald-600 flex items-center mr-1 font-medium">
@@ -82,7 +95,7 @@ export default function HostDashboard() {
                 {stats?.activeBookings ?? 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                2 checking in today
+                checking in soon
               </p>
             </CardContent>
           </Card>
@@ -102,13 +115,13 @@ export default function HostDashboard() {
           </Card>
           <Card className="hover-elevate transition-all duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Messages</CardTitle>
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Properties</CardTitle>
+              <Home className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
+              <div className="text-2xl font-bold">{stats?.totalProperties ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Response time: 12m
+                Active listings
               </p>
             </CardContent>
           </Card>
@@ -124,7 +137,13 @@ export default function HostDashboard() {
           </CardHeader>
           <CardContent>
             {bookingsLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading bookings...</div>
+              <div className="text-center py-8 text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" /> Loading bookings...
+              </div>
+            ) : bookings.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No bookings found. Connect your Airbnb account to sync bookings.
+              </div>
             ) : (
               <Table>
                 <TableHeader>
@@ -139,12 +158,12 @@ export default function HostDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bookings.map((booking) => (
+                  {bookings.map((booking: any) => (
                     <TableRow key={booking.id} className="cursor-pointer hover:bg-muted/50" data-testid={`row-booking-${booking.id}`}>
-                      <TableCell className="font-medium">{booking.guestName}</TableCell>
-                      <TableCell>Property #{booking.propertyId}</TableCell>
-                      <TableCell>{format(new Date(booking.checkIn), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>{format(new Date(booking.checkOut), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell className="font-medium">{booking.guest_name}</TableCell>
+                      <TableCell>{booking.property_name}</TableCell>
+                      <TableCell>{format(new Date(booking.check_in), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{format(new Date(booking.check_out), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={
                           booking.status === 'confirmed' ? 'border-primary text-primary bg-primary/5' :
@@ -157,11 +176,11 @@ export default function HostDashboard() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className={`h-2 w-2 rounded-full ${
-                            booking.cleaningStatus === 'completed' ? 'bg-green-500' :
-                            booking.cleaningStatus === 'scheduled' ? 'bg-blue-500' :
+                            booking.cleaning_status === 'completed' ? 'bg-green-500' :
+                            booking.cleaning_status === 'scheduled' ? 'bg-blue-500' :
                             'bg-yellow-500'
                           }`} />
-                          <span className="capitalize text-sm">{booking.cleaningStatus}</span>
+                          <span className="capitalize text-sm">{booking.cleaning_status}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">${booking.amount}</TableCell>

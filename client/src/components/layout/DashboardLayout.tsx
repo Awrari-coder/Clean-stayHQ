@@ -7,14 +7,15 @@ import {
   Settings, 
   LogOut, 
   Menu,
-  X,
   Brush,
   DollarSign
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserRole, MOCK_USERS } from "@/lib/mockData";
+import { useAuth } from "@/lib/auth";
+
+type UserRole = "host" | "cleaner" | "admin" | "cleaning_company";
 
 interface SidebarProps {
   role: UserRole;
@@ -26,6 +27,7 @@ interface SidebarProps {
 
 const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) => {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   const links = {
     host: [
@@ -40,6 +42,12 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
       { href: "/cleaner/payments", label: "Earnings", icon: DollarSign },
       { href: "/cleaner/settings", label: "Profile", icon: Settings },
     ],
+    cleaning_company: [
+      { href: "/cleaner", label: "My Tasks", icon: Brush },
+      { href: "/cleaner/schedule", label: "Schedule", icon: Calendar },
+      { href: "/cleaner/payments", label: "Earnings", icon: DollarSign },
+      { href: "/cleaner/settings", label: "Profile", icon: Settings },
+    ],
     admin: [
       { href: "/admin", label: "Overview", icon: LayoutDashboard },
       { href: "/admin/users", label: "Users", icon: Users },
@@ -48,7 +56,6 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
   };
 
   const currentLinks = links[role] || [];
-  const user = MOCK_USERS.find(u => u.role === role);
 
   return (
     <>
@@ -84,12 +91,12 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
         <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
           {currentLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = location === link.href;
+            const isActive = location === link.href || location.startsWith(link.href + "/");
             
             return (
               <Link key={link.href} href={link.href}>
-                <a className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative",
+                <span className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative cursor-pointer",
                   isActive 
                     ? "bg-sidebar-primary text-sidebar-primary-foreground" 
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -103,7 +110,7 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
                       {link.label}
                     </div>
                   )}
-                </a>
+                </span>
               </Link>
             );
           })}
@@ -113,8 +120,8 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
         <div className="p-4 border-t border-sidebar-border">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
             <Avatar className="h-9 w-9 border border-sidebar-border">
-              <AvatarImage src={user?.avatar} />
-              <AvatarFallback>{user?.name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={user?.avatar || undefined} />
+              <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
             </Avatar>
             {!collapsed && (
               <div className="flex-1 overflow-hidden">
@@ -123,11 +130,15 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
               </div>
             )}
             {!collapsed && (
-              <Link href="/">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground/50 hover:text-white hover:bg-sidebar-accent">
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 text-sidebar-foreground/50 hover:text-white hover:bg-sidebar-accent"
+                onClick={logout}
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             )}
           </div>
         </div>
@@ -162,6 +173,7 @@ export const DashboardLayout = ({ children, role }: { children: React.ReactNode,
             size="icon" 
             className="md:hidden"
             onClick={() => setMobileOpen(true)}
+            data-testid="button-menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -175,6 +187,7 @@ export const DashboardLayout = ({ children, role }: { children: React.ReactNode,
               size="sm" 
               className="hidden md:flex"
               onClick={() => setCollapsed(!collapsed)}
+              data-testid="button-collapse"
             >
               {collapsed ? "Expand" : "Collapse"}
             </Button>

@@ -1,11 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/auth";
 import type { Booking, CleanerJob, User, Property, Payment } from "@shared/schema";
 
 const API_BASE = "/api";
 
-// Fetch helpers
+// Fetch helpers with auth
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -13,7 +16,10 @@ async function fetchJson<T>(url: string): Promise<T> {
 async function postJson<T>(url: string, data: any): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -23,7 +29,10 @@ async function postJson<T>(url: string, data: any): Promise<T> {
 async function patchJson<T>(url: string, data: any): Promise<T> {
   const res = await fetch(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -46,7 +55,127 @@ export function useUser(id: number) {
   });
 }
 
-// ===== BOOKINGS =====
+// ===== HOST ROUTES =====
+export function useHostBookings() {
+  return useQuery({
+    queryKey: ["host", "bookings"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/host/bookings`),
+  });
+}
+
+export function useHostProperties() {
+  return useQuery({
+    queryKey: ["host", "properties"],
+    queryFn: () => fetchJson<Property[]>(`${API_BASE}/host/properties`),
+  });
+}
+
+export function useHostStats() {
+  return useQuery({
+    queryKey: ["host", "stats"],
+    queryFn: () => fetchJson<{
+      totalRevenue: number;
+      activeBookings: number;
+      completedCleanings: number;
+      totalProperties: number;
+    }>(`${API_BASE}/host/stats`),
+  });
+}
+
+export function useHostSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => postJson(`${API_BASE}/host/sync`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host"] });
+    },
+  });
+}
+
+// ===== CLEANER ROUTES =====
+export function useCleanerJobs() {
+  return useQuery({
+    queryKey: ["cleaner", "jobs"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/cleaner/jobs`),
+  });
+}
+
+export function useCleanerStats() {
+  return useQuery({
+    queryKey: ["cleaner", "stats"],
+    queryFn: () => fetchJson<{
+      totalEarnings: number;
+      pendingJobs: number;
+      completedJobs: number;
+      totalJobs: number;
+    }>(`${API_BASE}/cleaner/stats`),
+  });
+}
+
+export function useCleanerPayouts() {
+  return useQuery({
+    queryKey: ["cleaner", "payouts"],
+    queryFn: () => fetchJson<Payment[]>(`${API_BASE}/cleaner/payouts`),
+  });
+}
+
+export function useAcceptJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: number) => postJson(`${API_BASE}/cleaner/jobs/${jobId}/accept`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cleaner"] });
+    },
+  });
+}
+
+export function useCompleteJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: number) => postJson(`${API_BASE}/cleaner/jobs/${jobId}/complete`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cleaner"] });
+    },
+  });
+}
+
+// ===== ADMIN ROUTES =====
+export function useAdminUsers() {
+  return useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: () => fetchJson<User[]>(`${API_BASE}/admin/users`),
+  });
+}
+
+export function useAdminBookings() {
+  return useQuery({
+    queryKey: ["admin", "bookings"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/bookings`),
+  });
+}
+
+export function useAdminJobs() {
+  return useQuery({
+    queryKey: ["admin", "jobs"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/jobs`),
+  });
+}
+
+export function useAdminIntegrations() {
+  return useQuery({
+    queryKey: ["admin", "integrations"],
+    queryFn: () => fetchJson<any>(`${API_BASE}/admin/integrations`),
+  });
+}
+
+export function useAdminStats() {
+  return useQuery({
+    queryKey: ["admin", "stats"],
+    queryFn: () => fetchJson<any>(`${API_BASE}/admin/stats`),
+  });
+}
+
+// ===== LEGACY ROUTES (for backward compatibility) =====
 export function useBookings(propertyId?: number) {
   return useQuery<Booking[]>({
     queryKey: ["bookings", propertyId],
@@ -59,21 +188,6 @@ export function useBookings(propertyId?: number) {
   });
 }
 
-export function useUpdateBookingStatus() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, status, cleaningStatus }: { 
-      id: number; 
-      status: string; 
-      cleaningStatus?: string 
-    }) => patchJson(`${API_BASE}/bookings/${id}`, { status, cleaningStatus }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
-    },
-  });
-}
-
-// ===== CLEANER JOBS =====
 export function useJobs(cleanerId?: number) {
   return useQuery<CleanerJob[]>({
     queryKey: ["jobs", cleanerId],
@@ -86,28 +200,6 @@ export function useJobs(cleanerId?: number) {
   });
 }
 
-export function useCompleteJob() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (jobId: number) => patchJson(`${API_BASE}/jobs/${jobId}/complete`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["stats"] });
-    },
-  });
-}
-
-// ===== PAYMENTS =====
-export function usePayments(userId: number) {
-  return useQuery<Payment[]>({
-    queryKey: ["payments", userId],
-    queryFn: () => fetchJson(`${API_BASE}/payments/user/${userId}`),
-    enabled: !!userId,
-  });
-}
-
-// ===== SYNC LOGS =====
 export function useCreateSyncLog() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -116,32 +208,5 @@ export function useCreateSyncLog() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
     },
-  });
-}
-
-// ===== STATS =====
-export function useHostStats(hostId: number) {
-  return useQuery({
-    queryKey: ["stats", "host", hostId],
-    queryFn: () => fetchJson<{
-      totalRevenue: number;
-      activeBookings: number;
-      completedCleanings: number;
-      totalProperties: number;
-    }>(`${API_BASE}/stats/host/${hostId}`),
-    enabled: !!hostId,
-  });
-}
-
-export function useCleanerStats(cleanerId: number) {
-  return useQuery({
-    queryKey: ["stats", "cleaner", cleanerId],
-    queryFn: () => fetchJson<{
-      totalEarnings: number;
-      pendingJobs: number;
-      completedJobs: number;
-      totalJobs: number;
-    }>(`${API_BASE}/stats/cleaner/${cleanerId}`),
-    enabled: !!cleanerId,
   });
 }

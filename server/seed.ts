@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { users, properties, bookings, cleanerJobs, payments } from "@shared/schema";
 import { addDays, subDays } from "date-fns";
+import bcrypt from "bcrypt";
 
 async function seed() {
   console.log("🌱 Seeding database...");
@@ -12,12 +13,15 @@ async function seed() {
   await db.delete(properties);
   await db.delete(users);
 
-  // Create users (password: "password" - in production, hash this!)
+  // Hash password "password" for all users
+  const passwordHash = await bcrypt.hash("password", 10);
+
+  // Create users
   const [host, cleaner1, cleaner2, admin] = await db.insert(users).values([
     {
       name: "Sarah Host",
       email: "sarah@example.com",
-      passwordHash: "$2a$10$YqhXZ8Z8Z8Z8Z8Z8Z8Z8ZeXZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8", // "password"
+      passwordHash,
       role: "host",
       phone: "+1-512-555-0101",
       avatar: "https://i.pravatar.cc/150?u=sarah",
@@ -25,7 +29,7 @@ async function seed() {
     {
       name: "Mike Cleaner",
       email: "mike@example.com",
-      passwordHash: "$2a$10$YqhXZ8Z8Z8Z8Z8Z8Z8Z8ZeXZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+      passwordHash,
       role: "cleaner",
       phone: "+1-512-555-0102",
       avatar: "https://i.pravatar.cc/150?u=mike",
@@ -33,7 +37,7 @@ async function seed() {
     {
       name: "Jessica Cleaner",
       email: "jess@example.com",
-      passwordHash: "$2a$10$YqhXZ8Z8Z8Z8Z8Z8Z8Z8ZeXZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+      passwordHash,
       role: "cleaner",
       phone: "+1-512-555-0103",
       avatar: "https://i.pravatar.cc/150?u=jess",
@@ -41,7 +45,7 @@ async function seed() {
     {
       name: "Admin Alice",
       email: "admin@example.com",
-      passwordHash: "$2a$10$YqhXZ8Z8Z8Z8Z8Z8Z8Z8ZeXZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+      passwordHash,
       role: "admin",
       phone: "+1-512-555-0100",
       avatar: "https://i.pravatar.cc/150?u=alice",
@@ -184,6 +188,11 @@ async function seed() {
 
   console.log("✅ Created payments");
   console.log("🎉 Seeding complete!");
+  
+  console.log("\n📋 Test Accounts:");
+  console.log("  Host:    sarah@example.com / password");
+  console.log("  Cleaner: mike@example.com / password");
+  console.log("  Admin:   admin@example.com / password");
 }
 
 seed()
