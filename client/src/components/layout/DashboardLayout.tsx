@@ -1,21 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  Settings, 
-  LogOut, 
-  Menu,
-  Brush,
-  DollarSign
-} from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth";
-
-type UserRole = "host" | "cleaner" | "admin" | "cleaning_company";
+import { SIDEBAR_CONFIG, type UserRole } from "@/config/sidebar";
 
 interface SidebarProps {
   role: UserRole;
@@ -29,33 +19,8 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
-  const links = {
-    host: [
-      { href: "/host", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/host/bookings", label: "Bookings", icon: Calendar },
-      { href: "/host/payments", label: "Payments", icon: DollarSign },
-      { href: "/host/settings", label: "Settings", icon: Settings },
-    ],
-    cleaner: [
-      { href: "/cleaner", label: "My Tasks", icon: Brush },
-      { href: "/cleaner/schedule", label: "Schedule", icon: Calendar },
-      { href: "/cleaner/payments", label: "Earnings", icon: DollarSign },
-      { href: "/cleaner/settings", label: "Profile", icon: Settings },
-    ],
-    cleaning_company: [
-      { href: "/cleaner", label: "My Tasks", icon: Brush },
-      { href: "/cleaner/schedule", label: "Schedule", icon: Calendar },
-      { href: "/cleaner/payments", label: "Earnings", icon: DollarSign },
-      { href: "/cleaner/settings", label: "Profile", icon: Settings },
-    ],
-    admin: [
-      { href: "/admin", label: "Overview", icon: LayoutDashboard },
-      { href: "/admin/users", label: "Users", icon: Users },
-      { href: "/admin/system", label: "System", icon: Settings },
-    ]
-  };
-
-  const currentLinks = links[role] || [];
+  const effectiveRole = (user?.role as UserRole) || role;
+  const currentLinks = SIDEBAR_CONFIG[effectiveRole] || [];
 
   return (
     <>
@@ -147,7 +112,7 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
   );
 };
 
-export const DashboardLayout = ({ children, role }: { children: React.ReactNode, role: UserRole }) => {
+export const DashboardLayout = ({ children, role }: { children: React.ReactNode; role: UserRole }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 

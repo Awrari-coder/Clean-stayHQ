@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ROLE_HOME, type UserRole } from "@/config/sidebar";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import HostDashboard from "@/pages/HostDashboard";
@@ -27,14 +28,10 @@ function ProtectedRoute({
     return <Redirect to="/" />;
   }
   
-  // Redirect to correct dashboard if role doesn't match
-  if (!allowedRoles.includes(user!.role)) {
-    let correctPath = "/host";
-    if (user!.role === "admin") {
-      correctPath = "/admin";
-    } else if (user!.role === "cleaner" || user!.role === "cleaning_company") {
-      correctPath = "/cleaner";
-    }
+  const userRole = user!.role as UserRole;
+  
+  if (!allowedRoles.includes(userRole)) {
+    const correctPath = ROLE_HOME[userRole] || "/";
     return <Redirect to={correctPath} />;
   }
   
