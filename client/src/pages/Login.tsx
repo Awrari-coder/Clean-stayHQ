@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +18,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   // Redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const dashboardPath = user.role === "admin" ? "/admin" : user.role === "cleaner" ? "/cleaner" : "/host";
+      setLocation(dashboardPath);
+    }
+  }, [isAuthenticated, user, setLocation]);
+
   if (isAuthenticated && user) {
-    const dashboardPath = user.role === "admin" ? "/admin" : user.role === "cleaner" ? "/cleaner" : "/host";
-    setLocation(dashboardPath);
     return null;
   }
 

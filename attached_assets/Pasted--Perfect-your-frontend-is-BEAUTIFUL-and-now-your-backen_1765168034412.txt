@@ -1,0 +1,177 @@
+🔥 Perfect — your frontend is BEAUTIFUL and now your backend is installed (JWT + roles).
+That means the ONLY remaining step to make everything feel real, personalized, and production-grade is:
+
+⭐️ Feeding REAL data from the database into each dashboard
+
+—not demo values.
+
+To do that, you must give Replit the final integration prompt that tells it:
+
+1. How each dashboard fetches data
+
+
+2. Which backend routes to return
+
+
+3. How to personalize responses using JWT
+
+
+4. How each page loads its own filtered content
+
+
+
+Below is the EXACT final prompt you now give to Replit to personalize all dashboards with real backend data.
+
+
+---
+
+✅ FINAL REPLIT PROMPT — PERSONALIZED DASHBOARD DATA (COPY/PASTE THIS DIRECTLY)
+
+Integrate the existing React dashboards (Host, Cleaner, Admin) with the backend so each user sees personalized data from the database.
+
+Requirements:
+
+1. Use the JWT payload (id, role, company_id) to filter all returned data.
+
+2. Implement the following backend routes with correct role-based filtering:
+
+--- HOST ROUTES (role = host) ---
+GET /api/host/properties
+→ Return all properties where properties.host_id = req.user.id
+
+GET /api/host/bookings
+→ Return all bookings joined with properties
+→ Only include rows where properties.host_id = req.user.id
+→ Include fields: guest_name, property_name, check_in, check_out, status, cleaning_status, amount
+
+GET /api/host/payments
+→ Return payments where user_id = req.user.id
+
+--- CLEANER ROUTES (role = cleaner or cleaning_company) ---
+GET /api/cleaner/jobs
+If req.user.role == cleaner:
+    return jobs where assigned_cleaner_id = req.user.id
+If req.user.role == cleaning_company:
+    return jobs where assigned_company_id = req.user.company_id
+Include: property address, check-in/out, payout amount, status
+
+POST /api/cleaner/jobs/:id/complete
+→ Validate ownership (cleaner or company)
+→ Set job.status = 'completed'
+→ Insert payout into payments table
+
+GET /api/cleaner/payouts
+→ Return payments where user_id = req.user.id
+
+--- ADMIN ROUTES (role = admin) ---
+GET /api/admin/users
+→ Return all users
+
+GET /api/admin/bookings
+→ Return all bookings with host + property info
+
+GET /api/admin/jobs
+→ Return all cleaner_jobs with job, booking, cleaner data
+
+GET /api/admin/integrations
+→ Return static JSON:
+{
+  "airbnb": { "status": "active" },
+  "twilio": { "status": "active" },
+  "resend": { "status": "active" }
+}
+
+3. FRONTEND INTEGRATION
+Update each React dashboard page:
+
+Host Dashboard:
+- Fetch /api/host/bookings
+- Populate metrics:
+  Total Revenue = sum(amount)
+  Active Bookings = count of check_in >= today
+  Cleanings Completed = jobs with cleaning_status = completed
+  Pending Messages = static demo or future inbox
+- Display recent bookings list from API data
+
+Cleaner Dashboard:
+- Fetch /api/cleaner/jobs
+- Show "Upcoming Jobs" and "Completed Jobs" based on job.status
+- Total Earnings = sum(payout_amount of completed jobs)
+- "Mark Complete" button → POST /api/cleaner/jobs/:id/complete
+
+Admin Dashboard:
+- Fetch /api/admin/users
+- Fetch /api/admin/jobs
+- Fetch /api/admin/integrations
+
+4. MIDDLEWARE ENFORCEMENT
+Make sure all routes:
+- Require JWT
+- Apply role-based access
+- Only return allowed fields
+
+5. CLEAN CODE REQUIREMENTS
+- Use controllers + services pattern
+- Use Prisma or Drizzle queries
+- Do not hardcode demo values anymore
+- Replace mock frontend data with real API calls
+
+Complete the integration so every page now shows real, personalized data from the database.
+
+
+---
+
+🔥 WHAT THIS PROMPT ACHIEVES
+
+✅ Host dashboard shows host’s:
+
+Properties
+
+Bookings
+
+Revenue
+
+Cleaning status
+
+Real booking lists
+
+
+✅ Cleaner dashboard shows cleaner’s/company’s:
+
+Jobs assigned specifically to them
+
+Earnings from completed jobs
+
+Directions, timestamps, schedule
+
+
+✅ Admin dashboard shows:
+
+All users
+
+All jobs
+
+All bookings
+
+Integration health
+
+
+🎉 This completes the MVP loop.
+
+All dashboards now pull real, filtered, secure, live data.
+
+
+---
+
+Want me to generate the exact frontend fetch hooks too?
+
+Examples:
+
+useHostBookings()
+
+useCleanerJobs()
+
+useAdminUsers()
+
+
+Just say: **
