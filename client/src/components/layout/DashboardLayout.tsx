@@ -59,23 +59,26 @@ const Sidebar = ({ role, collapsed, setCollapsed, mobileOpen, setMobileOpen }: S
             const isActive = location === link.href || location.startsWith(link.href + "/");
             
             return (
-              <Link key={link.href} href={link.href}>
-                <span className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative cursor-pointer",
+              <Link 
+                key={link.href} 
+                href={link.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative cursor-pointer no-underline",
                   isActive 
                     ? "bg-sidebar-primary text-sidebar-primary-foreground" 
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}>
-                  <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-white" : "text-sidebar-foreground/70 group-hover:text-white")} />
-                  {!collapsed && (
-                    <span className="font-medium text-sm">{link.label}</span>
-                  )}
-                  {collapsed && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                      {link.label}
-                    </div>
-                  )}
-                </span>
+                )}
+                data-testid={`nav-link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-white" : "text-sidebar-foreground/70 group-hover:text-white")} />
+                {!collapsed && (
+                  <span className="font-medium text-sm">{link.label}</span>
+                )}
+                {collapsed && (
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+                    {link.label}
+                  </div>
+                )}
               </Link>
             );
           })}
