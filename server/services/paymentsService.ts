@@ -18,9 +18,9 @@ export interface PayoutDetails {
   description: string | null;
   paidAt: Date | null;
   createdAt: Date;
-  propertyName?: string;
-  cleanerName?: string;
-  cleanerEmail?: string;
+  propertyName?: string | null;
+  cleanerName?: string | null;
+  cleanerEmail?: string | null;
 }
 
 // Create a payout record for a completed job
