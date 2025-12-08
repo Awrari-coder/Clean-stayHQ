@@ -28,7 +28,7 @@ localPort = 37515
 externalPort = 3002
 
 [[ports]]
-localPort = 38531
+localPort = 42735
 externalPort = 3003
 
 [env]
@@ -57,4 +57,4 @@ waitForPort = 5000
 
 [agent]
 mockupState = "FULLSTACK"
-integrations = ["javascript_database:1.0.0", "twilio:1.0.0"]
+integrations = ["javascript_database:1.0.0", "twilio:1.0.0", "resend:1.0.0"]

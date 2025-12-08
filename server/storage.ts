@@ -52,6 +52,7 @@ export interface IStorage {
   createCleanerJob(job: InsertCleanerJob): Promise<CleanerJob>;
   updateJobStatus(id: number, status: string): Promise<CleanerJob | undefined>;
   completeJob(id: number): Promise<CleanerJob | undefined>;
+  completeJobWithNotes(id: number, notes?: string): Promise<CleanerJob | undefined>;
   
   // Payments
   getPayment(id: number): Promise<Payment | undefined>;
@@ -302,6 +303,18 @@ export class DatabaseStorage implements IStorage {
       .set({ 
         status: 'completed',
         completedAt: new Date()
+      })
+      .where(eq(cleanerJobs.id, id))
+      .returning();
+    return job || undefined;
+  }
+
+  async completeJobWithNotes(id: number, notes?: string): Promise<CleanerJob | undefined> {
+    const [job] = await db.update(cleanerJobs)
+      .set({ 
+        status: 'completed',
+        completedAt: new Date(),
+        notes: notes || null
       })
       .where(eq(cleanerJobs.id, id))
       .returning();

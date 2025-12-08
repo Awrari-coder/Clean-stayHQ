@@ -2,6 +2,7 @@ import { Router } from "express";
 import { storage } from "../storage";
 import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import { getIntegrationStatus } from "../services/airbnbService";
+import { getAllPayoutsWithDetails, markPayoutPaid } from "../services/paymentsService";
 
 const router = Router();
 
@@ -84,6 +85,34 @@ router.get("/stats", async (req: AuthRequest, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+// GET /api/admin/payouts - Get all payouts with details
+router.get("/payouts", async (req: AuthRequest, res) => {
+  try {
+    const payouts = await getAllPayoutsWithDetails();
+    res.json(payouts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch payouts" });
+  }
+});
+
+// POST /api/admin/payouts/:id/mark-paid - Mark a payout as paid
+router.post("/payouts/:id/mark-paid", async (req: AuthRequest, res) => {
+  try {
+    const paymentId = parseInt(req.params.id);
+    const success = await markPayoutPaid(paymentId);
+    
+    if (success) {
+      res.json({ success: true, message: "Payout marked as paid" });
+    } else {
+      res.status(404).json({ error: "Payout not found or already paid" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to mark payout as paid" });
   }
 });
 

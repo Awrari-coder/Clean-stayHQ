@@ -59,6 +59,7 @@ export const cleanerJobs = pgTable('cleaner_jobs', {
   payoutAmount: decimal('payout_amount', { precision: 10, scale: 2 }).notNull(),
   scheduledDate: timestamp('scheduled_date').notNull(),
   checklist: jsonb('checklist'),
+  notes: text('notes'),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -71,6 +72,7 @@ export const payments = pgTable('payments', {
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   status: paymentStatusEnum('status').notNull().default('pending'),
   description: text('description'),
+  paidAt: timestamp('paid_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

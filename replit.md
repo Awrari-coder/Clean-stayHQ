@@ -107,23 +107,38 @@ The application follows a monorepo structure with clear separation between clien
 - **Drizzle ORM:** Type-safe query builder with migration support (`drizzle-kit`)
 - **Migration Strategy:** Schema changes tracked in `/migrations` directory
 
-### Third-Party Services (Planned Integration)
+### Third-Party Services (Active Integrations)
 
-**Airbnb Partner API:**
-- OAuth-based authentication for host accounts
-- Calendar API synchronization for booking data
-- Property listing integration
-- Current implementation: Stub service with TODO markers for actual integration
+**Airbnb iCal Integration:**
+- iCal calendar synchronization for booking data from Airbnb
+- Automatic job scheduling from imported bookings
+- Scheduler runs automatically on server startup
 
-**Twilio:**
-- SMS notifications for cleaners
-- Broadcast alerts from admin dashboard
-- Current status: Simulated in frontend
+**Twilio (via Replit Connector):**
+- SMS notifications for cleaners on job assignment
+- SMS notifications for hosts on job completion
+- Uses Replit's secure credential management
+- Graceful fallback when credentials unavailable
 
-**Resend:**
-- Email notifications for booking confirmations
-- Payment receipts
-- Current status: Simulated in frontend
+**Resend (via Replit Connector):**
+- Email notifications for job assignments and completions
+- Rich HTML email templates with property details
+- Uses Replit's secure credential management
+- Graceful fallback when credentials unavailable
+
+### Notification & Payment Services
+
+**NotificationsService (`server/services/notificationsService.ts`):**
+- `sendSms()` - Send SMS via Twilio connector
+- `sendEmail()` - Send email via Resend connector
+- `notifyNewJobAssigned()` - Notify cleaner of new job assignment
+- `notifyJobCompleted()` - Notify host when cleaning is done
+
+**PaymentsService (`server/services/paymentsService.ts`):**
+- `createPayoutForJob()` - Create pending payout when job completed
+- `markPayoutPaid()` - Admin marks payout as paid
+- `getCleanerPayoutSummary()` - Get cleaner earnings breakdown
+- `getAllPayoutsWithDetails()` - Admin view of all payouts
 
 ### UI & Developer Tools
 

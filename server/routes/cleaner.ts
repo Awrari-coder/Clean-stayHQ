@@ -2,6 +2,8 @@ import { Router } from "express";
 import { storage } from "../storage";
 import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import type { CleanerJob } from "@shared/schema";
+import { createPayoutForJob, getCleanerPayoutSummary } from "../services/paymentsService";
+import { notifyJobCompleted } from "../services/notificationsService";
 
 const router = Router();
 
@@ -72,6 +74,7 @@ router.post("/jobs/:id/accept", async (req: AuthRequest, res) => {
 router.post("/jobs/:id/complete", async (req: AuthRequest, res) => {
   try {
     const jobId = parseInt(req.params.id);
+    const { notes } = req.body;
     const job = await storage.getCleanerJob(jobId);
     
     if (!job) {
@@ -87,32 +90,30 @@ router.post("/jobs/:id/complete", async (req: AuthRequest, res) => {
       return res.status(403).json({ error: "You don't have permission to complete this job" });
     }
     
-    // Complete the job
-    const completedJob = await storage.completeJob(jobId);
+    // Complete the job with notes
+    const completedJob = await storage.completeJobWithNotes(jobId, notes);
     
-    // Create payout payment
-    await storage.createPayment({
-      userId: req.user!.id,
-      jobId: jobId,
-      type: "payout",
-      amount: job.payoutAmount,
-      status: "completed",
-      description: `Completed job #${jobId}`,
-    });
+    // Update related booking status
+    await storage.updateBookingStatus(job.bookingId, "completed", "completed");
     
-    res.json({ ok: true, job: completedJob });
+    // Create payout (pending status for admin approval)
+    await createPayoutForJob(jobId, req.user!.id);
+    
+    // Send notifications to host
+    notifyJobCompleted(jobId).catch(err => console.error("[Notifications] Error:", err));
+    
+    res.json({ success: true, job: completedJob });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to complete job" });
   }
 });
 
-// GET /api/cleaner/payouts - Get payment history for this cleaner
+// GET /api/cleaner/payouts - Get payment history with summary for this cleaner
 router.get("/payouts", async (req: AuthRequest, res) => {
   try {
-    const payments = await storage.getPaymentsByUser(req.user!.id);
-    const payouts = payments.filter(p => p.type === "payout");
-    res.json(payouts);
+    const summary = await getCleanerPayoutSummary(req.user!.id);
+    res.json(summary);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch payouts" });
