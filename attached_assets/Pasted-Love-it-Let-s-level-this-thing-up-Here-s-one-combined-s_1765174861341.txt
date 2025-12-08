@@ -1,0 +1,225 @@
+Love it. Let’s level this thing up.
+Here’s one combined spec you can paste into Replit’s Agent that covers:
+
+A. Cleaner job completion workflow
+
+B. Notifications (Twilio + Resend)
+
+C. Payouts & earnings tracking
+
+
+I’ll structure it so the agent knows exactly what to do.
+
+
+---
+
+🔧 REPLIT PROMPT – Implement Modules A, B, C
+
+> Copy-paste everything below into Replit (Agent box / “Make, test, iterate…”):
+
+
+
+Implement three features in the CleanStay app:
+
+A) Cleaner Job Completion Workflow  
+B) Notification System (Twilio + Resend)  
+C) Payout & Earnings System
+
+Use the existing tech stack (Node/Express, PostgreSQL via Drizzle/Prisma, JWT auth, React dashboards).
+
+=======================
+A) CLEANER JOB COMPLETION WORKFLOW
+=======================
+
+1. DB UPDATES
+
+Extend the cleaner_jobs table:
+
+- Add columns:
+  - completed_at TIMESTAMP NULL
+  - notes TEXT NULL
+
+If we already have payout_amount and status, keep them.
+
+2. BACKEND ROUTE (CLEANER)
+
+Create/complete this route:
+
+POST /api/cleaner/jobs/:id/complete
+
+Requirements:
+- Role: cleaner or cleaning_company only.
+- Validate that the job belongs to the current user or their company:
+  - if cleaner → assigned_cleaner_id must equal req.user.id
+  - if cleaning_company → assigned_company_id must equal req.user.company_id
+- Request body: { notes?: string }
+- Behavior:
+  - Set cleaner_jobs.status = 'completed'
+  - Set cleaner_jobs.completed_at = now()
+  - Store notes if provided
+  - Set related booking.status = 'completed'
+  - Call a new service function:
+      paymentsService.createPayoutForJob(jobId)
+  - Call notificationsService.notifyJobCompleted(jobId)
+- Response: { success: true }
+
+3. FRONTEND – CLEANER DASHBOARD
+
+On the Cleaner dashboard, for each job card:
+
+- "Mark Complete" button should:
+  - Call POST /api/cleaner/jobs/:id/complete
+  - Optionally open a small textarea for notes before sending
+  - After success, update UI to move the job from "Upcoming" to "Completed"
+
+If not already done, visually differentiate completed vs upcoming jobs.
+
+=======================
+B) NOTIFICATION SYSTEM (TWILIO + RESEND)
+=======================
+
+We already have Twilio and Resend connected. Wrap them in a clean service.
+
+1. Create /server/services/notificationsService.ts (or similar):
+
+- Functions:
+
+  async function sendSms(to: string, message: string)
+    - Uses Twilio credentials from env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)
+    - Handles errors gracefully (log but don’t crash)
+
+  async function sendEmail(to: string, subject: string, html: string)
+    - Uses Resend credentials from env (RESEND_API_KEY, RESEND_FROM_EMAIL)
+    - Simple transactional email implementation
+
+2. High-level helper functions:
+
+  async function notifyNewJobAssigned(cleanerJobId: string)
+    - Fetch job + cleaner + property + host
+    - SMS to cleaner: "New cleaning job at <property_name> on <date/time>."
+    - Email to cleaner (optional, HTML summary)
+
+  async function notifyJobCompleted(cleanerJobId: string)
+    - SMS/email to host: "Cleaning completed for <property_name> by <cleaner_name>."
+    - Email to admin (optional) with summary
+
+3. Call notification helpers at the right places:
+
+- In the scheduler when a new cleaner_jobs row is created → call notifyNewJobAssigned(jobId)
+- In the POST /api/cleaner/jobs/:id/complete route → call notifyJobCompleted(jobId)
+
+4. ENV CHECK
+
+If Twilio or Resend env vars are missing, the notification functions should NO-OP (log a warning) instead of crashing.
+
+=======================
+C) PAYOUT & EARNINGS SYSTEM
+=======================
+
+We already have a payments table with:
+id, user_id, type ('deposit'|'payout'), amount, status, created_at.
+
+1. DB UPDATE (OPTIONAL BUT NICE)
+
+- Add job_id UUID NULL to payments (FK to cleaner_jobs.id)
+- Add paid_at TIMESTAMP NULL
+
+2. PAYMENTS SERVICE
+
+Create /server/services/paymentsService.ts with:
+
+async function createPayoutForJob(jobId: string)
+  - Find the cleaner_jobs record including assigned cleaner and payout_amount
+  - If no payout_amount, default to 0
+  - Create a payments row:
+      user_id = assigned_cleaner_id (or company if that’s who gets paid)
+      type = 'payout'
+      amount = payout_amount
+      status = 'pending'
+      job_id = jobId
+
+async function markPayoutPaid(paymentId: string)
+  - Update payments.status = 'completed'
+  - Set paid_at = now()
+
+3. CLEANER API – VIEW EARNINGS
+
+GET /api/cleaner/payouts
+- Role: cleaner or cleaning_company
+- For cleaner:
+    SELECT * FROM payments WHERE user_id = req.user.id AND type = 'payout'
+- For cleaning_company:
+    (if we later pay the company, filter by company user id; for now we can treat like cleaner)
+- Return list + summary:
+  - totalPending
+  - totalCompleted
+  - totalAllTime
+
+4. ADMIN API – MANAGE PAYOUTS
+
+GET /api/admin/payouts
+- Role: admin
+- Return all payout-type payments, joined with cleaner user and job information.
+
+POST /api/admin/payouts/:id/mark-paid
+- Role: admin
+- Calls paymentsService.markPayoutPaid(id)
+
+5. FRONTEND – CLEANER DASHBOARD "Earnings" TAB
+
+Update the Cleaner dashboard Earnings tab to use live data:
+
+- On load, call GET /api/cleaner/payouts
+- Show:
+  - "Total Earnings" = sum of completed payouts
+  - "Pending Payouts" = sum of pending payouts
+  - Table of payouts:
+      Date | Job/Property | Status (Pending/Completed) | Amount
+
+If we already have basic mock earnings, replace them with the real API data.
+
+6. FRONTEND – ADMIN PAYOUTS VIEW
+
+In the Admin dashboard, add a simple "Payouts" or "Payments" panel (can be a new tab or card):
+
+- Fetch /api/admin/payouts
+- Show table:
+  Cleaner | Job/Property | Amount | Status | Action
+- For rows with status = 'pending', include a "Mark Paid" button that calls:
+  POST /api/admin/payouts/:id/mark-paid
+- After marking paid, update the UI.
+
+=======================
+GENERAL REQUIREMENTS
+=======================
+
+- Use existing authMiddleware + requireRole for all new routes.
+- Keep TypeScript types consistent with the current project.
+- Add any missing imports and update routing index files.
+- Ensure that all new actions are visible with the demo accounts:
+    - sarah@example.com (host)
+    - mike@example.com (cleaner)
+    - admin@example.com (admin)
+- After implementing, test:
+    1) New booking synced by iCal → scheduler assigns job → cleaner sees job
+    2) Cleaner clicks "Mark Complete" → job moves to Completed, booking set to completed
+    3) Payout entry created for that job
+    4) Cleaner Earnings tab shows updated totals
+    5) Admin Payouts panel shows the pending payout, can mark it as paid
+    6) Twilio/Resend notifications fire when env vars are present, and safely no-op when not.
+
+Provide a short summary of what was changed and where (files + key functions) when finished.
+
+
+---
+
+That prompt tells Replit exactly how to:
+
+Finish the job completion loop
+
+Wire up notifications
+
+Build a real earnings & payout system
+
+
+If you want, after the agent runs, you can send me screenshots or any error output, and I’ll help you refine or debug the final bits.
