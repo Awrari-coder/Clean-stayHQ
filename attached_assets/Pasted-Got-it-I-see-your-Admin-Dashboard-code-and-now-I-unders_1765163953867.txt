@@ -1,0 +1,460 @@
+Got it — I see your Admin Dashboard code, and now I understand exactly what stage you're at:
+
+✅ You already have a functional frontend MVP
+✅ You already have role-based dashboards (Host, Cleaner, Admin)
+✅ You already integrated Twilio + Resend (simulated)
+🔥 And now you want the FINAL WEB APP LAYER PLAN — the true backend architecture + workflow layer that connects everything together.
+
+Below is the Final Webplay Prompt rewritten precisely, fully, and ready to hand to Replit, GitHub, or any engineer.
+
+No gaps.
+No missing layers.
+Covers:
+
+API Integration
+
+Backend architecture
+
+Scheduling logic
+
+Database schema
+
+Role system
+
+Cleaner-company model
+
+Payment flows
+
+Mapping + geolocation
+
+Notifications
+
+Future scalability
+
+
+
+---
+
+✅ 🔥 FINAL WEBPLAY / REPLIT BUILD PROMPT (COMPLETE SYSTEM BLUEPRINT)
+
+Copy + paste this into Replit or give it to a developer.
+This is the blueprint for your CleanStay / CleanDispatch Platform MVP.
+
+
+---
+
+🚀 1. PROJECT ROOT STRUCTURE
+
+/root
+  /backend
+    /routes
+    /controllers
+    /services
+    /models
+    /jobs
+    /lib
+    /auth
+    /payments
+  /frontend
+    /admin_dashboard
+    /host_dashboard
+    /cleaner_dashboard
+    /components
+    /hooks
+    /lib
+  /database
+  .env
+
+
+---
+
+🚀 2. BACKEND LAYER (Node.js + Express + PostgreSQL)
+
+2.1 Models (Database Tables)
+
+Create these PostgreSQL tables:
+
+Users
+
+id PK
+name
+email
+password_hash
+role (admin | host | cleaner | cleaning_company)
+company_id (nullable, foreign key)
+phone
+created_at
+
+Properties (Owned by Host)
+
+id PK
+host_id FK->users
+address
+city
+state
+zip
+latitude
+longitude
+airbnb_property_id
+created_at
+
+Bookings (Synced from Airbnb)
+
+id PK
+property_id FK
+airbnb_booking_id
+guest_name
+check_in
+check_out
+status (pending | cleaning_assigned | completed)
+created_at
+
+Cleaner Jobs
+
+id PK
+booking_id FK
+assigned_cleaner_id
+assigned_company_id
+status (unassigned | accepted | in_progress | completed)
+payout_amount
+checklist JSONB
+created_at
+
+Payments
+
+id PK
+user_id
+type (deposit | payout)
+amount
+status
+created_at
+
+Sync Logs
+
+id PK
+source (airbnb)
+status
+timestamp
+
+
+---
+
+🚀 3. BACKEND SERVICES
+
+✔ 3.1 Airbnb Integration Service
+
+File: /backend/services/airbnbService.js
+
+Handles:
+
+OAuth connection (Airbnb Partner API)
+
+Fetch bookings every 15 minutes
+
+Update bookings table
+
+Trigger scheduling engine when new booking hits DB
+
+
+
+---
+
+✔ 3.2 Scheduling Engine
+
+File: /backend/jobs/scheduler.js
+
+Logic:
+
+1. When Airbnb booking arrives
+
+
+2. Identify property location
+
+
+3. Find cleaners or cleaning companies within radius
+
+
+4. Assign based on:
+
+availability
+
+company priority
+
+proximity
+
+
+
+5. Send notifications (Twilio SMS + Resend Email)
+
+
+6. Create a “Cleaner Job” entry
+
+
+
+
+---
+
+✔ 3.3 Cleaner Workflow Service
+
+File: /backend/services/cleanerService.js
+
+Cleaners / companies can:
+
+View schedule
+
+Accept job
+
+Mark job complete
+
+Upload photos
+
+Trigger payout
+
+
+
+---
+
+✔ 3.4 Payments Service
+
+File: /backend/payments/paymentsService.js
+
+For MVP:
+
+Just log payouts + deposits
+
+No Stripe needed yet
+But structure it to drop Stripe in later easily.
+
+
+
+---
+
+✔ 3.5 Notifications Service
+
+Use:
+
+Twilio → SMS
+
+Resend → Emails
+
+
+Send:
+
+New job alerts
+
+Job reminders
+
+Completion confirmations
+
+Admin alerts
+
+
+
+---
+
+🚀 4. FRONTEND LAYER (You Already Have This)
+
+For clarity:
+
+Admin Dashboard
+
+Sidebar Items:
+
+System Health
+
+Users
+
+All Bookings
+
+Cleaner Jobs
+
+Integrations
+
+Payouts
+
+Logs
+
+
+Host Dashboard
+
+Sidebar Items:
+
+My Properties
+
+Airbnb Sync
+
+Upcoming Bookings
+
+Payments
+
+Support
+
+
+Cleaner / Company Dashboard
+
+Sidebar Items:
+
+My Jobs
+
+Today's Schedule
+
+Payouts
+
+Company Staff (if company)
+
+Job History
+
+
+Your UI already matches this.
+
+
+---
+
+🚀 5. END-TO-END WORKFLOW (The Missing Part You Asked For)
+
+Host Flow
+
+1. Host signs up
+
+
+2. Connects Airbnb account
+
+
+3. Airbnb → sends bookings → stored in DB
+
+
+4. Host sees upcoming turnovers
+
+
+5. Host can add special instructions
+
+
+
+Scheduling Flow
+
+1. New booking enters DB
+
+
+2. System identifies cleaning window
+
+
+3. Scheduling Engine assigns cleaner (or company)
+
+
+4. Cleaner notified
+
+
+5. Host sees assignment
+
+
+
+Cleaner Flow
+
+1. Logs in
+
+
+2. Views schedule
+
+
+3. Accept job
+
+
+4. Mark job complete
+
+
+5. Uploads checklist / photos
+
+
+6. Payout generated
+
+
+
+Admin Flow
+
+You oversee:
+
+Users
+
+Jobs
+
+Sync health
+
+Logs
+
+Payouts
+
+
+
+---
+
+🚀 6. GEOGRAPHY & MAPS
+
+For the MVP:
+
+Assume Texas only
+
+Use Google Maps API or Leaflet for:
+
+property coordinates
+
+cleaner radius
+
+distance calculation
+
+
+
+Backend uses Haversine formula to calculate distance.
+
+
+---
+
+🚀 7. FINAL WEBPLAY / REPLIT PROMPT
+
+(Copy this into Replit terminal or hand it to your engineer)
+
+"Create a complete backend for the CleanStay MVP using Node.js, Express, and PostgreSQL with the following structure:
+
+Models: users, properties, bookings, cleaner_jobs, payments, sync_logs
+
+Services: airbnbService (oauth + booking sync), schedulerService (assign cleaners), cleanerService (job workflow), paymentsService (log payouts), notificationService (Twilio + Resend)
+
+Routes: /auth, /bookings, /cleaners, /hosts, /admin
+
+System must support:
+
+Airbnb sync every 15 minutes
+
+Role-based access (host, cleaner, admin, company)
+
+Cleaner job scheduling engine
+
+Payment logging
+
+SMS + email notifications
+
+Texas-based geolocation assignment
+
+
+Connect this backend to the existing frontend dashboards exactly as structured."**
+
+
+
+---
+
+✅ Ready for Next Step
+
+If you want, I can now generate:
+
+✅ The exact backend folder + file templates
+
+✅ The exact PostgreSQL schema SQL
+
+✅ The Express routes with boilerplate code
+
+✅ The full Airbnb OAuth integration starter
+
+✅ The cleaner assignment algorithm
+
+Just say “Generate the backend skeleton” or “Generate the SQL schema.”
+
+You're building something real here — and the architecture is solid. Let's keep going.
