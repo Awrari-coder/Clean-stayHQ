@@ -17,10 +17,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Redirect if already logged in
+  // Redirect if already logged in - use actual user role
   useEffect(() => {
     if (isAuthenticated && user) {
-      const dashboardPath = user.role === "admin" ? "/admin" : user.role === "cleaner" ? "/cleaner" : "/host";
+      let dashboardPath = "/host";
+      if (user.role === "admin") {
+        dashboardPath = "/admin";
+      } else if (user.role === "cleaner" || user.role === "cleaning_company") {
+        dashboardPath = "/cleaner";
+      }
       setLocation(dashboardPath);
     }
   }, [isAuthenticated, user, setLocation]);
@@ -29,7 +34,7 @@ export default function Login() {
     return null;
   }
 
-  const handleLogin = async (e: React.FormEvent, role: string) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
@@ -40,9 +45,7 @@ export default function Login() {
         title: "Welcome back!",
         description: "Successfully logged in.",
       });
-      // Redirect based on role
-      const dashboardPath = role === "admin" ? "/admin" : role === "cleaner" ? "/cleaner" : "/host";
-      setLocation(dashboardPath);
+      // Redirect handled by useEffect when user state updates
     } else {
       toast({
         title: "Login failed",
@@ -97,7 +100,7 @@ export default function Login() {
             {["host", "cleaner", "admin"].map((role) => (
               <TabsContent key={role} value={role}>
                 <Card className="border-none shadow-none">
-                  <form onSubmit={(e) => handleLogin(e, role)}>
+                  <form onSubmit={handleLogin}>
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor={`${role}-email`}>Email</Label>

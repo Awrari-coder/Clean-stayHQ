@@ -27,8 +27,15 @@ function ProtectedRoute({
     return <Redirect to="/" />;
   }
   
+  // Redirect to correct dashboard if role doesn't match
   if (!allowedRoles.includes(user!.role)) {
-    return <Redirect to="/" />;
+    let correctPath = "/host";
+    if (user!.role === "admin") {
+      correctPath = "/admin";
+    } else if (user!.role === "cleaner" || user!.role === "cleaning_company") {
+      correctPath = "/cleaner";
+    }
+    return <Redirect to={correctPath} />;
   }
   
   return <Component />;
