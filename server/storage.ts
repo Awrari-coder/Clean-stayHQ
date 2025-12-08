@@ -32,6 +32,7 @@ export interface IStorage {
   getProperty(id: number): Promise<Property | undefined>;
   getPropertiesByHost(hostId: number): Promise<Property[]>;
   createProperty(property: InsertProperty): Promise<Property>;
+  updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined>;
   
   // Bookings
   getBooking(id: number): Promise<Booking | undefined>;
@@ -110,6 +111,14 @@ export class DatabaseStorage implements IStorage {
   async createProperty(insertProperty: InsertProperty): Promise<Property> {
     const [property] = await db.insert(properties).values(insertProperty).returning();
     return property;
+  }
+
+  async updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined> {
+    const [property] = await db.update(properties)
+      .set({ icalUrl })
+      .where(eq(properties.id, id))
+      .returning();
+    return property || undefined;
   }
 
   // Bookings

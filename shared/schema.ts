@@ -32,6 +32,7 @@ export const properties = pgTable('properties', {
   latitude: decimal('latitude', { precision: 10, scale: 7 }),
   longitude: decimal('longitude', { precision: 10, scale: 7 }),
   airbnbPropertyId: text('airbnb_property_id'),
+  icalUrl: text('ical_url'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

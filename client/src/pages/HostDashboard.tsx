@@ -4,16 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, MessageSquare, Loader2 } from "lucide-react";
-import { useHostBookings, useHostStats, useHostSync } from "@/hooks/useApi";
+import { useHostBookings, useHostStats, useHostSync, useHostProperties } from "@/hooks/useApi";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { ConnectCalendar } from "@/components/ConnectCalendar";
 
 export default function HostDashboard() {
   const { user } = useAuth();
-  const { data: bookings = [], isLoading: bookingsLoading } = useHostBookings();
-  const { data: stats } = useHostStats();
+  const { data: bookings = [], isLoading: bookingsLoading, refetch: refetchBookings } = useHostBookings();
+  const { data: properties = [] } = useHostProperties();
+  const { data: stats, refetch: refetchStats } = useHostStats();
   const syncMutation = useHostSync();
+
+  const handleSyncComplete = () => {
+    refetchBookings();
+    refetchStats();
+  };
 
   const handleSync = () => {
     toast({
@@ -27,6 +34,7 @@ export default function HostDashboard() {
           title: "Sync Complete",
           description: "Your calendar is up to date.",
         });
+        handleSyncComplete();
       },
       onError: () => {
         toast({
@@ -126,6 +134,9 @@ export default function HostDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Connect Airbnb Calendar */}
+        <ConnectCalendar properties={properties} onSyncComplete={handleSyncComplete} />
 
         {/* Bookings Table */}
         <Card className="border-none shadow-md">

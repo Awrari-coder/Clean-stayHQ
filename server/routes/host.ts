@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { storage } from "../storage";
 import { authMiddleware, requireRole, AuthRequest } from "../auth";
-import { syncHostBookings } from "../services/airbnbService";
+import { syncHostProperties } from "../services/icalService";
+import { assignCleanersToBookings } from "../services/schedulerService";
 
 const router = Router();
 
@@ -17,6 +18,31 @@ router.get("/properties", async (req: AuthRequest, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch properties" });
+  }
+});
+
+// POST /api/host/properties/:id/ical - Save iCal URL for a property
+router.post("/properties/:id/ical", async (req: AuthRequest, res) => {
+  try {
+    const propertyId = parseInt(req.params.id);
+    const { icalUrl } = req.body;
+
+    if (!icalUrl) {
+      return res.status(400).json({ error: "iCal URL is required" });
+    }
+
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+
+    // Update the property with the iCal URL
+    const updated = await storage.updatePropertyIcalUrl(propertyId, icalUrl);
+    res.json({ success: true, property: updated });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to save iCal URL" });
   }
 });
 
@@ -67,16 +93,26 @@ router.get("/stats", async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/host/sync - Trigger Airbnb sync
+// POST /api/host/sync - Trigger iCal sync for all host properties
 router.post("/sync", async (req: AuthRequest, res) => {
   try {
-    await syncHostBookings(req.user!.id);
+    const result = await syncHostProperties(req.user!.id);
+    
+    // Auto-assign cleaners to any new pending bookings
+    const assignedCount = await assignCleanersToBookings();
+    
     await storage.createSyncLog({
-      source: "airbnb",
+      source: "airbnb_ical",
       status: "success",
-      message: `Manual sync triggered by host ${req.user!.id}`,
+      message: `Manual sync by host ${req.user!.id}: ${result.synced} synced, ${result.failed} failed, ${assignedCount} jobs assigned`,
     });
-    res.json({ ok: true, message: "Sync completed successfully" });
+    res.json({ 
+      ok: true, 
+      message: "Sync completed", 
+      synced: result.synced,
+      failed: result.failed,
+      jobsAssigned: assignedCount
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Sync failed" });
