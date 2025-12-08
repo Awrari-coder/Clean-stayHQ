@@ -1,4 +1,4 @@
-import { pgTable, text, integer, serial, timestamp, decimal, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, serial, timestamp, decimal, jsonb, pgEnum, boolean, time, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -18,6 +18,9 @@ export const users = pgTable('users', {
   companyId: integer('company_id'),
   phone: text('phone'),
   avatar: text('avatar'),
+  emailVerified: boolean('email_verified').notNull().default(false),
+  emailVerificationToken: text('email_verification_token'),
+  emailVerificationSentAt: timestamp('email_verification_sent_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -33,6 +36,9 @@ export const properties = pgTable('properties', {
   longitude: decimal('longitude', { precision: 10, scale: 7 }),
   airbnbPropertyId: text('airbnb_property_id'),
   icalUrl: text('ical_url'),
+  lastSyncAt: timestamp('last_sync_at'),
+  lastSyncStatus: text('last_sync_status'),
+  lastSyncMessage: text('last_sync_message'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -78,6 +84,7 @@ export const payments = pgTable('payments', {
 
 export const syncLogs = pgTable('sync_logs', {
   id: serial('id').primaryKey(),
+  propertyId: integer('property_id').references(() => properties.id),
   source: text('source').notNull(),
   status: text('status').notNull(),
   message: text('message'),
@@ -110,6 +117,24 @@ export const checklistCompletions = pgTable('checklist_completions', {
   checklistId: integer('checklist_id').notNull().references(() => cleaningChecklists.id),
   completedItems: jsonb('completed_items').notNull(),
   completedAt: timestamp('completed_at').notNull().defaultNow(),
+});
+
+export const cleanerAvailability = pgTable('cleaner_availability', {
+  id: serial('id').primaryKey(),
+  cleanerId: integer('cleaner_id').notNull().references(() => users.id),
+  weekday: integer('weekday').notNull(),
+  startTime: time('start_time').notNull(),
+  endTime: time('end_time').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const cleanerTimeOff = pgTable('cleaner_time_off', {
+  id: serial('id').primaryKey(),
+  cleanerId: integer('cleaner_id').notNull().references(() => users.id),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 // Insert Schemas
@@ -158,6 +183,16 @@ export const insertChecklistCompletionSchema = createInsertSchema(checklistCompl
   completedAt: true,
 });
 
+export const insertCleanerAvailabilitySchema = createInsertSchema(cleanerAvailability).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCleanerTimeOffSchema = createInsertSchema(cleanerTimeOff).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -185,3 +220,9 @@ export type InsertCleaningChecklist = z.infer<typeof insertCleaningChecklistSche
 
 export type ChecklistCompletion = typeof checklistCompletions.$inferSelect;
 export type InsertChecklistCompletion = z.infer<typeof insertChecklistCompletionSchema>;
+
+export type CleanerAvailability = typeof cleanerAvailability.$inferSelect;
+export type InsertCleanerAvailability = z.infer<typeof insertCleanerAvailabilitySchema>;
+
+export type CleanerTimeOff = typeof cleanerTimeOff.$inferSelect;
+export type InsertCleanerTimeOff = z.infer<typeof insertCleanerTimeOffSchema>;

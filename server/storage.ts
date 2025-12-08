@@ -8,6 +8,8 @@ import {
   jobPhotos,
   cleaningChecklists,
   checklistCompletions,
+  cleanerAvailability,
+  cleanerTimeOff,
   type User, 
   type InsertUser,
   type Property,
@@ -26,6 +28,10 @@ import {
   type InsertCleaningChecklist,
   type ChecklistCompletion,
   type InsertChecklistCompletion,
+  type CleanerAvailability,
+  type InsertCleanerAvailability,
+  type CleanerTimeOff,
+  type InsertCleanerTimeOff,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -34,14 +40,18 @@ export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  updateUserVerification(userId: number, data: { emailVerified?: boolean; emailVerificationToken?: string | null; emailVerificationSentAt?: Date | null }): Promise<User | undefined>;
   
   // Properties
   getProperty(id: number): Promise<Property | undefined>;
   getPropertiesByHost(hostId: number): Promise<Property[]>;
   createProperty(property: InsertProperty): Promise<Property>;
   updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined>;
+  updatePropertySyncStatus(id: number, status: string, message: string): Promise<Property | undefined>;
+  getSyncLogsByPropertyIds(propertyIds: number[], limit?: number): Promise<SyncLog[]>;
   
   // Bookings
   getBooking(id: number): Promise<Booking | undefined>;
@@ -94,6 +104,14 @@ export interface IStorage {
   getChecklistForJob(jobId: number): Promise<CleaningChecklist | null>;
   getChecklistCompletion(jobId: number): Promise<ChecklistCompletion | null>;
   saveChecklistCompletion(data: InsertChecklistCompletion): Promise<ChecklistCompletion>;
+  
+  // Cleaner Availability
+  getCleanerAvailability(cleanerId: number): Promise<CleanerAvailability[]>;
+  setCleanerAvailability(cleanerId: number, availability: InsertCleanerAvailability[]): Promise<CleanerAvailability[]>;
+  getCleanerTimeOff(cleanerId: number): Promise<CleanerTimeOff[]>;
+  addCleanerTimeOff(data: InsertCleanerTimeOff): Promise<CleanerTimeOff>;
+  deleteCleanerTimeOff(id: number, cleanerId: number): Promise<boolean>;
+  getAllCleanersWithAvailability(): Promise<{ cleaner: User; availability: CleanerAvailability[]; timeOff: CleanerTimeOff[] }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -108,6 +126,11 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.emailVerificationToken, token));
+    return user || undefined;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
@@ -115,6 +138,14 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  async updateUserVerification(userId: number, data: { emailVerified?: boolean; emailVerificationToken?: string | null; emailVerificationSentAt?: Date | null }): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    return user || undefined;
   }
 
   // Properties
@@ -134,10 +165,26 @@ export class DatabaseStorage implements IStorage {
 
   async updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined> {
     const [property] = await db.update(properties)
-      .set({ icalUrl })
+      .set({ icalUrl, lastSyncStatus: null, lastSyncMessage: null })
       .where(eq(properties.id, id))
       .returning();
     return property || undefined;
+  }
+
+  async updatePropertySyncStatus(id: number, status: string, message: string): Promise<Property | undefined> {
+    const [property] = await db.update(properties)
+      .set({ lastSyncAt: new Date(), lastSyncStatus: status, lastSyncMessage: message })
+      .where(eq(properties.id, id))
+      .returning();
+    return property || undefined;
+  }
+
+  async getSyncLogsByPropertyIds(propertyIds: number[], limit: number = 20): Promise<SyncLog[]> {
+    if (propertyIds.length === 0) return [];
+    return await db.select().from(syncLogs)
+      .where(inArray(syncLogs.propertyId, propertyIds))
+      .orderBy(desc(syncLogs.timestamp))
+      .limit(limit);
   }
 
   // Bookings
@@ -473,6 +520,53 @@ export class DatabaseStorage implements IStorage {
     
     const [completion] = await db.insert(checklistCompletions).values(data).returning();
     return completion;
+  }
+  
+  // Cleaner Availability
+  async getCleanerAvailability(cleanerId: number): Promise<CleanerAvailability[]> {
+    return await db.select().from(cleanerAvailability)
+      .where(eq(cleanerAvailability.cleanerId, cleanerId))
+      .orderBy(cleanerAvailability.weekday);
+  }
+  
+  async setCleanerAvailability(cleanerId: number, availability: InsertCleanerAvailability[]): Promise<CleanerAvailability[]> {
+    await db.delete(cleanerAvailability).where(eq(cleanerAvailability.cleanerId, cleanerId));
+    
+    if (availability.length === 0) return [];
+    
+    const toInsert = availability.map(a => ({ ...a, cleanerId }));
+    const inserted = await db.insert(cleanerAvailability).values(toInsert).returning();
+    return inserted;
+  }
+  
+  async getCleanerTimeOff(cleanerId: number): Promise<CleanerTimeOff[]> {
+    return await db.select().from(cleanerTimeOff)
+      .where(eq(cleanerTimeOff.cleanerId, cleanerId))
+      .orderBy(cleanerTimeOff.startDate);
+  }
+  
+  async addCleanerTimeOff(data: InsertCleanerTimeOff): Promise<CleanerTimeOff> {
+    const [timeOff] = await db.insert(cleanerTimeOff).values(data).returning();
+    return timeOff;
+  }
+  
+  async deleteCleanerTimeOff(id: number, cleanerId: number): Promise<boolean> {
+    const result = await db.delete(cleanerTimeOff)
+      .where(and(eq(cleanerTimeOff.id, id), eq(cleanerTimeOff.cleanerId, cleanerId)));
+    return true;
+  }
+  
+  async getAllCleanersWithAvailability(): Promise<{ cleaner: User; availability: CleanerAvailability[]; timeOff: CleanerTimeOff[] }[]> {
+    const cleaners = await db.select().from(users)
+      .where(eq(users.role, 'cleaner'));
+    
+    const result = await Promise.all(cleaners.map(async (cleaner) => {
+      const availability = await this.getCleanerAvailability(cleaner.id);
+      const timeOff = await this.getCleanerTimeOff(cleaner.id);
+      return { cleaner, availability, timeOff };
+    }));
+    
+    return result;
   }
 }
 
