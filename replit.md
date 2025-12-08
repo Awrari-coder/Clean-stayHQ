@@ -166,3 +166,37 @@ The application follows a monorepo structure with clear separation between clien
 - jsonwebtoken: JWT token generation and verification
 - CORS enabled for frontend-backend communication
 - Credentials included in API requests for session handling
+- Email verification system with token-based validation
+- Resend email for verification links
+
+## Recent Features (December 2025)
+
+### Email Verification System
+- Token-based email verification flow
+- Verification link sent on registration
+- EmailVerificationBanner component displays on all dashboards until verified
+- Resend verification endpoint available
+- JWT payload includes `email_verified` status
+- Graceful UX: users can login but see verification reminder
+
+### Host Calendar Settings (iCal Sync)
+- Property-level sync status tracking (`lastSyncAt`, `lastSyncStatus`, `lastSyncMessage`)
+- HostCalendarSettings component at `/host/calendar`
+- Manual sync trigger per property
+- Sync history log filtered by host's properties
+- Visual status indicators (success/error/pending)
+
+### Cleaner Availability System
+- Weekly schedule management (`cleaner_availability` table)
+- Day-of-week (0-6) with start/end time ranges
+- Time-off management (`cleaner_time_off` table)
+- CleanerAvailability component at `/cleaner/availability`
+- Scheduler integration: filters cleaners by availability windows
+- Respects time-off when assigning jobs
+
+### Database Schema Additions
+- `cleanerAvailability` - Weekly work schedule per cleaner
+- `cleanerTimeOff` - Date ranges when cleaner is unavailable
+- `properties` extended with `lastSyncAt`, `lastSyncStatus`, `lastSyncMessage`
+- `syncLogs` extended with `propertyId` for granular tracking
+- `users` extended with `emailVerified`, `emailVerificationToken`, `emailVerificationExpires`

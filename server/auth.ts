@@ -11,6 +11,7 @@ export interface JWTPayload {
   email: string;
   role: string;
   companyId: number | null;
+  emailVerified?: boolean;
 }
 
 export interface AuthRequest extends Request {

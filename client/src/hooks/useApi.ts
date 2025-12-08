@@ -253,3 +253,90 @@ export function useCreateSyncLog() {
     },
   });
 }
+
+// ===== HOST CALENDAR & SYNC =====
+export function useHostSyncLogs() {
+  return useQuery({
+    queryKey: ["host", "sync-logs"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/host/sync-logs`),
+  });
+}
+
+export function usePropertySync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (propertyId: number) => postJson(`${API_BASE}/host/properties/${propertyId}/sync`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "properties"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "sync-logs"] });
+    },
+  });
+}
+
+// ===== CLEANER AVAILABILITY =====
+export function useCleanerAvailability() {
+  return useQuery({
+    queryKey: ["cleaner", "availability"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/cleaner/availability`),
+  });
+}
+
+async function putJson<T>(url: string, data: any): Promise<T> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { 
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export function useUpdateAvailability() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { availability: Array<{ weekday: number; startTime: string; endTime: string }> }) => 
+      putJson(`${API_BASE}/cleaner/availability`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cleaner", "availability"] });
+    },
+  });
+}
+
+export function useCleanerTimeOff() {
+  return useQuery({
+    queryKey: ["cleaner", "timeoff"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/cleaner/timeoff`),
+  });
+}
+
+export function useAddTimeOff() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { startDate: string; endDate: string; reason?: string }) => 
+      postJson(`${API_BASE}/cleaner/timeoff`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cleaner", "timeoff"] });
+    },
+  });
+}
+
+async function deleteJson(url: string): Promise<void> {
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export function useDeleteTimeOff() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteJson(`${API_BASE}/cleaner/timeoff/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cleaner", "timeoff"] });
+    },
+  });
+}

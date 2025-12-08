@@ -10,6 +10,8 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { CleanerAvailability } from "@/components/CleanerAvailability";
 
 function ScheduleSection() {
   const { data: jobs = [], isLoading } = useCleanerJobs();
@@ -187,6 +189,7 @@ export default function CleanerDashboard() {
   const getSection = () => {
     if (location.startsWith('/cleaner/schedule')) return 'schedule';
     if (location.startsWith('/cleaner/payments')) return 'earnings';
+    if (location.startsWith('/cleaner/availability')) return 'availability';
     if (location.startsWith('/cleaner/settings')) return 'profile';
     return 'tasks';
   };
@@ -220,6 +223,8 @@ export default function CleanerDashboard() {
         return <ScheduleSection />;
       case 'earnings':
         return <EarningsSection />;
+      case 'availability':
+        return <CleanerAvailability />;
       case 'profile':
         return <ProfileSection />;
       default:
@@ -340,6 +345,7 @@ export default function CleanerDashboard() {
 
   return (
     <DashboardLayout role={user?.role === "cleaning_company" ? "cleaning_company" : "cleaner"}>
+      <EmailVerificationBanner />
       <div className="space-y-8">
         {renderSection()}
       </div>

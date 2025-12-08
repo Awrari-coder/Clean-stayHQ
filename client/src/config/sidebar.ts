@@ -6,7 +6,9 @@ import {
   Brush,
   DollarSign,
   Cog,
-  BarChart3
+  BarChart3,
+  RefreshCw,
+  Clock
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -22,6 +24,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
   host: [
     { label: "Dashboard", href: "/host", icon: LayoutDashboard },
     { label: "Bookings", href: "/host/bookings", icon: Calendar },
+    { label: "Calendar Sync", href: "/host/calendar", icon: RefreshCw },
     { label: "Payments", href: "/host/payments", icon: DollarSign },
     { label: "Settings", href: "/host/settings", icon: Settings },
   ],
@@ -29,6 +32,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
   cleaner: [
     { label: "My Tasks", href: "/cleaner", icon: Brush },
     { label: "Schedule", href: "/cleaner/schedule", icon: Calendar },
+    { label: "Availability", href: "/cleaner/availability", icon: Clock },
     { label: "Earnings", href: "/cleaner/payments", icon: DollarSign },
     { label: "Profile", href: "/cleaner/settings", icon: Settings },
   ],
@@ -36,6 +40,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
   cleaning_company: [
     { label: "My Tasks", href: "/cleaner", icon: Brush },
     { label: "Schedule", href: "/cleaner/schedule", icon: Calendar },
+    { label: "Availability", href: "/cleaner/availability", icon: Clock },
     { label: "Earnings", href: "/cleaner/payments", icon: DollarSign },
     { label: "Profile", href: "/cleaner/settings", icon: Settings },
   ],

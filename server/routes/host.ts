@@ -21,7 +21,7 @@ router.get("/properties", async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/host/properties/:id/ical - Save iCal URL for a property
+// POST /api/host/properties/:id/ical - Save iCal URL for a property (legacy)
 router.post("/properties/:id/ical", async (req: AuthRequest, res) => {
   try {
     const propertyId = parseInt(req.params.id);
@@ -43,6 +43,55 @@ router.post("/properties/:id/ical", async (req: AuthRequest, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to save iCal URL" });
+  }
+});
+
+// PUT /api/host/properties/:id/calendar - Update iCal URL for a property
+router.put("/properties/:id/calendar", async (req: AuthRequest, res) => {
+  try {
+    const propertyId = parseInt(req.params.id);
+    const { icalUrl } = req.body;
+
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+
+    // Update the property with the iCal URL (also clears sync status)
+    const updated = await storage.updatePropertyIcalUrl(propertyId, icalUrl || "");
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to save calendar URL" });
+  }
+});
+
+// POST /api/host/properties/:id/sync - Trigger sync for a specific property
+router.post("/properties/:id/sync", async (req: AuthRequest, res) => {
+  try {
+    const propertyId = parseInt(req.params.id);
+
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+
+    if (!property.icalUrl) {
+      return res.status(400).json({ error: "No iCal URL configured for this property" });
+    }
+
+    // Import the syncProperty function
+    const { syncProperty } = await import("../services/icalService");
+    await syncProperty(property);
+
+    // Refetch property with updated sync status
+    const updatedProperty = await storage.getProperty(propertyId);
+    res.json(updatedProperty);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Sync failed" });
   }
 });
 
@@ -116,6 +165,20 @@ router.post("/sync", async (req: AuthRequest, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Sync failed" });
+  }
+});
+
+// GET /api/host/sync-logs - Get sync logs for this host's properties
+router.get("/sync-logs", async (req: AuthRequest, res) => {
+  try {
+    const properties = await storage.getPropertiesByHost(req.user!.id);
+    const propertyIds = properties.map(p => p.id);
+    
+    const logs = await storage.getSyncLogsByPropertyIds(propertyIds, 20);
+    res.json(logs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch sync logs" });
   }
 });
 

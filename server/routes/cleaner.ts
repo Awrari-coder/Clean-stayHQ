@@ -296,4 +296,93 @@ router.get("/earnings-projection", async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/cleaner/availability - Get cleaner's weekly availability
+router.get("/availability", async (req: AuthRequest, res) => {
+  try {
+    const availability = await storage.getCleanerAvailability(req.user!.id);
+    res.json(availability);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch availability" });
+  }
+});
+
+// PUT /api/cleaner/availability - Set cleaner's weekly availability
+router.put("/availability", async (req: AuthRequest, res) => {
+  try {
+    const { availability } = req.body;
+    
+    if (!Array.isArray(availability)) {
+      return res.status(400).json({ error: "Availability must be an array" });
+    }
+    
+    // Validate each entry
+    for (const entry of availability) {
+      if (typeof entry.weekday !== 'number' || entry.weekday < 0 || entry.weekday > 6) {
+        return res.status(400).json({ error: "Invalid weekday (must be 0-6)" });
+      }
+      if (!entry.startTime || !entry.endTime) {
+        return res.status(400).json({ error: "startTime and endTime are required" });
+      }
+    }
+    
+    const updated = await storage.setCleanerAvailability(req.user!.id, availability);
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update availability" });
+  }
+});
+
+// GET /api/cleaner/timeoff - Get cleaner's time off entries
+router.get("/timeoff", async (req: AuthRequest, res) => {
+  try {
+    const timeOff = await storage.getCleanerTimeOff(req.user!.id);
+    res.json(timeOff);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch time off" });
+  }
+});
+
+// POST /api/cleaner/timeoff - Add a time off entry
+router.post("/timeoff", async (req: AuthRequest, res) => {
+  try {
+    const { startDate, endDate, reason } = req.body;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: "startDate and endDate are required" });
+    }
+    
+    const timeOff = await storage.addCleanerTimeOff({
+      cleanerId: req.user!.id,
+      startDate,
+      endDate,
+      reason: reason || null,
+    });
+    
+    res.status(201).json(timeOff);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to add time off" });
+  }
+});
+
+// DELETE /api/cleaner/timeoff/:id - Delete a time off entry
+router.delete("/timeoff/:id", async (req: AuthRequest, res) => {
+  try {
+    const timeOffId = parseInt(req.params.id);
+    const success = await storage.deleteCleanerTimeOff(timeOffId, req.user!.id);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "Time off entry not found" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete time off" });
+  }
+});
+
 export default router;

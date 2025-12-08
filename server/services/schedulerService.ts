@@ -1,6 +1,43 @@
 import { db } from "../db";
-import { bookings, cleanerJobs, users } from "@shared/schema";
+import { bookings, cleanerJobs, users, syncLogs } from "@shared/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
+import { storage } from "../storage";
+import { notifyNewJobAssigned } from "./notificationsService";
+
+// Check if a cleaner is available on a specific date/time
+async function isCleanerAvailable(cleanerId: number, scheduledDate: Date): Promise<boolean> {
+  const weekday = scheduledDate.getDay();
+  const timeString = scheduledDate.toTimeString().substring(0, 5); // HH:MM
+  
+  // Get cleaner's availability for this weekday
+  const availability = await storage.getCleanerAvailability(cleanerId);
+  const dayAvailability = availability.find(a => a.weekday === weekday);
+  
+  // If no availability set for this day, assume available (default behavior)
+  if (!dayAvailability) {
+    return true;
+  }
+  
+  // Check if the scheduled time falls within availability window
+  const startTime = dayAvailability.startTime;
+  const endTime = dayAvailability.endTime;
+  
+  if (timeString < startTime || timeString > endTime) {
+    return false;
+  }
+  
+  // Check for time off conflicts
+  const timeOff = await storage.getCleanerTimeOff(cleanerId);
+  const scheduledDateStr = scheduledDate.toISOString().split('T')[0];
+  
+  for (const off of timeOff) {
+    if (scheduledDateStr >= off.startDate && scheduledDateStr <= off.endDate) {
+      return false;
+    }
+  }
+  
+  return true;
+}
 
 export async function assignCleanersToBookings(): Promise<number> {
   console.log("[Scheduler] Looking for unassigned bookings...");
@@ -20,12 +57,12 @@ export async function assignCleanersToBookings(): Promise<number> {
     return 0;
   }
 
-  // Get available cleaners
-  const cleaners = await db.select()
+  // Get all cleaners
+  const allCleaners = await db.select()
     .from(users)
     .where(eq(users.role, "cleaner"));
 
-  if (cleaners.length === 0) {
+  if (allCleaners.length === 0) {
     console.log("[Scheduler] No cleaners available");
     return 0;
   }
@@ -43,23 +80,50 @@ export async function assignCleanersToBookings(): Promise<number> {
       continue;
     }
 
-    // Simple round-robin assignment
-    const cleanerIndex = assigned % cleaners.length;
-    const cleaner = cleaners[cleanerIndex];
+    const scheduledDate = booking.checkOut;
+    
+    // Filter cleaners by availability for this date/time
+    const availableCleaners = [];
+    for (const cleaner of allCleaners) {
+      const isAvailable = await isCleanerAvailable(cleaner.id, scheduledDate);
+      if (isAvailable) {
+        availableCleaners.push(cleaner);
+      }
+    }
+
+    if (availableCleaners.length === 0) {
+      console.log(`[Scheduler] No cleaners available for booking ${booking.id} on ${scheduledDate.toISOString()}`);
+      
+      // Log warning
+      await db.insert(syncLogs).values({
+        source: "scheduler",
+        status: "warning",
+        message: `No available cleaners for booking ${booking.id} scheduled on ${scheduledDate.toLocaleDateString()}`,
+      });
+      
+      continue;
+    }
+
+    // Simple round-robin assignment from available cleaners
+    const cleanerIndex = assigned % availableCleaners.length;
+    const cleaner = availableCleaners[cleanerIndex];
 
     // Create cleaner job
-    await db.insert(cleanerJobs).values({
+    const [newJob] = await db.insert(cleanerJobs).values({
       bookingId: booking.id,
       assignedCleanerId: cleaner.id,
       status: "assigned",
       payoutAmount: "85.00",
       scheduledDate: booking.checkOut,
-    });
+    }).returning();
 
     // Update booking cleaning status
     await db.update(bookings)
       .set({ cleaningStatus: "scheduled" })
       .where(eq(bookings.id, booking.id));
+
+    // Send notification to cleaner
+    notifyNewJobAssigned(newJob.id).catch(err => console.error("[Scheduler] Notification error:", err));
 
     assigned++;
     console.log(`[Scheduler] Assigned booking ${booking.id} to cleaner ${cleaner.name}`);

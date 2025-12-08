@@ -8,6 +8,7 @@ interface User {
   role: "host" | "cleaner" | "admin" | "cleaning_company";
   phone?: string;
   avatar?: string;
+  emailVerified?: boolean;
 }
 
 interface AuthContextType {

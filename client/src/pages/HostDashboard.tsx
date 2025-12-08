@@ -10,6 +10,8 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ConnectCalendar } from "@/components/ConnectCalendar";
 import { useLocation } from "wouter";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { HostCalendarSettings } from "@/components/HostCalendarSettings";
 
 function BookingsSection() {
   const { data: bookings = [], isLoading } = useHostBookings();
@@ -168,6 +170,7 @@ export default function HostDashboard() {
   const getSection = () => {
     if (location.startsWith('/host/bookings')) return 'bookings';
     if (location.startsWith('/host/payments')) return 'payments';
+    if (location.startsWith('/host/calendar')) return 'calendar';
     if (location.startsWith('/host/settings')) return 'settings';
     return 'dashboard';
   };
@@ -209,6 +212,8 @@ export default function HostDashboard() {
         return <BookingsSection />;
       case 'payments':
         return <PaymentsSection />;
+      case 'calendar':
+        return <HostCalendarSettings />;
       case 'settings':
         return <SettingsSection />;
       default:
@@ -371,6 +376,7 @@ export default function HostDashboard() {
 
   return (
     <DashboardLayout role="host">
+      <EmailVerificationBanner />
       <div className="space-y-8">
         {renderSection()}
       </div>

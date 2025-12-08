@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 function UsersSection() {
   const { data: users = [], isLoading } = useAdminUsers();
@@ -659,6 +660,7 @@ export default function AdminDashboard() {
 
   return (
     <DashboardLayout role="admin">
+      <EmailVerificationBanner />
       <div className="space-y-8">
         {renderSection()}
       </div>
