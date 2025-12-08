@@ -103,7 +103,10 @@ router.get("/payouts", async (req: AuthRequest, res) => {
 router.post("/payouts/:id/mark-paid", async (req: AuthRequest, res) => {
   try {
     const paymentId = parseInt(req.params.id);
-    const success = await markPayoutPaid(paymentId);
+    const adminId = req.user!.id;
+    const adminEmail = req.user!.email;
+    
+    const success = await markPayoutPaid(paymentId, adminId, adminEmail);
     
     if (success) {
       res.json({ success: true, message: "Payout marked as paid" });

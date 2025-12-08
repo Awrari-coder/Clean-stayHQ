@@ -52,9 +52,27 @@ export async function createPayoutForJob(jobId: number, cleanerId: number): Prom
   }
 }
 
-// Mark a payout as paid
-export async function markPayoutPaid(paymentId: number): Promise<boolean> {
+// Mark a payout as paid (with audit logging)
+export async function markPayoutPaid(paymentId: number, adminId: number, adminEmail: string): Promise<boolean> {
   try {
+    // First verify the payment exists and is pending
+    const [existing] = await db.select()
+      .from(payments)
+      .where(and(
+        eq(payments.id, paymentId),
+        eq(payments.type, "payout")
+      ));
+
+    if (!existing) {
+      console.log(`[Payments] Payment ${paymentId} not found`);
+      return false;
+    }
+
+    if (existing.status === "completed") {
+      console.log(`[Payments] Payment ${paymentId} already marked as paid`);
+      return false;
+    }
+
     const [updated] = await db.update(payments)
       .set({
         status: "completed",
@@ -67,7 +85,9 @@ export async function markPayoutPaid(paymentId: number): Promise<boolean> {
       .returning();
 
     if (updated) {
-      console.log(`[Payments] Marked payment ${paymentId} as paid`);
+      // Audit log: record who marked this payout as paid
+      console.log(`[Payments AUDIT] Payment ${paymentId} marked as paid by admin ${adminId} (${adminEmail}) at ${new Date().toISOString()}`);
+      console.log(`[Payments AUDIT] Payout details: userId=${existing.userId}, amount=$${existing.amount}, jobId=${existing.jobId}`);
       return true;
     }
     return false;

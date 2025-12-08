@@ -115,7 +115,12 @@ export function useCleanerStats() {
 export function useCleanerPayouts() {
   return useQuery({
     queryKey: ["cleaner", "payouts"],
-    queryFn: () => fetchJson<Payment[]>(`${API_BASE}/cleaner/payouts`),
+    queryFn: () => fetchJson<{
+      totalPending: number;
+      totalCompleted: number;
+      totalAllTime: number;
+      payouts: any[];
+    }>(`${API_BASE}/cleaner/payouts`),
   });
 }
 
@@ -172,6 +177,23 @@ export function useAdminStats() {
   return useQuery({
     queryKey: ["admin", "stats"],
     queryFn: () => fetchJson<any>(`${API_BASE}/admin/stats`),
+  });
+}
+
+export function useAdminPayouts() {
+  return useQuery({
+    queryKey: ["admin", "payouts"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/payouts`),
+  });
+}
+
+export function useMarkPayoutPaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payoutId: number) => postJson(`${API_BASE}/admin/payouts/${payoutId}/mark-paid`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "payouts"] });
+    },
   });
 }
 
