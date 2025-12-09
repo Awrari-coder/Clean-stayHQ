@@ -239,3 +239,21 @@ The application follows a monorepo structure with clear separation between clien
   - AnimatedCounter - Framer Motion animated number transitions for stats
   - SystemHeartbeat - Admin widget showing scheduler and sync health status
 - **Integration:** Activity feeds visible on all role dashboards
+
+### Stripe Payment Integration
+- **stripe-replit-sync:** Automatic Stripe data synchronization to PostgreSQL `stripe` schema
+- **Server Initialization:** Runs schema migrations and sets up managed webhooks on startup
+- **Webhook Security:** UUID-based webhook routing for secure event processing
+- **API Endpoints (`server/routes/stripe.ts`):**
+  - `GET /api/stripe/publishable-key` - Returns Stripe publishable key for client
+  - `POST /api/stripe/create-checkout-session` - Creates Stripe checkout session for deposits
+  - `POST /api/stripe/create-portal-session` - Creates customer portal for subscription management
+  - `POST /api/stripe/webhook/:uuid` - Processes Stripe webhook events
+- **Webhook Handlers (`server/webhookHandlers.ts`):**
+  - `checkout.session.completed` - Handles successful checkout
+  - `invoice.paid` - Handles subscription payments
+  - `customer.subscription.updated/deleted` - Tracks subscription status changes
+- **User Schema Extensions:**
+  - `stripeCustomerId` - Links user to Stripe customer
+  - `stripeSubscriptionId` - Tracks active subscription
+- **Database Configuration:** Uses `NEON_DATABASE_URL` || `DATABASE_URL` pattern for consistency
