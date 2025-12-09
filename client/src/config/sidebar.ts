@@ -8,7 +8,9 @@ import {
   Cog,
   BarChart3,
   RefreshCw,
-  Clock
+  Clock,
+  Home,
+  ClipboardList
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -23,6 +25,7 @@ export type UserRole = "host" | "cleaner" | "admin" | "cleaning_company";
 export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
   host: [
     { label: "Dashboard", href: "/host", icon: LayoutDashboard },
+    { label: "Properties", href: "/host/properties", icon: Home },
     { label: "Bookings", href: "/host/bookings", icon: Calendar },
     { label: "Calendar Sync", href: "/host/calendar", icon: RefreshCw },
     { label: "Payments", href: "/host/payments", icon: DollarSign },
@@ -47,6 +50,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, SidebarLink[]> = {
 
   admin: [
     { label: "Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Demand", href: "/admin/demand", icon: ClipboardList },
     { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { label: "Users", href: "/admin/users", icon: Users },
     { label: "Payouts", href: "/admin/payouts", icon: DollarSign },

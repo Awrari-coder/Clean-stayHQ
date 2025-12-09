@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { AdminDemandDashboard } from "@/components/AdminDemandDashboard";
 
 function UsersSection() {
   const { data: users = [], isLoading } = useAdminUsers();
@@ -456,6 +457,7 @@ export default function AdminDashboard() {
   const { data: stats } = useAdminStats();
 
   const getSection = () => {
+    if (location.startsWith('/admin/demand')) return 'demand';
     if (location.startsWith('/admin/analytics')) return 'analytics';
     if (location.startsWith('/admin/users')) return 'users';
     if (location.startsWith('/admin/system')) return 'system';
@@ -487,6 +489,8 @@ export default function AdminDashboard() {
 
   const renderSection = () => {
     switch (section) {
+      case 'demand':
+        return <AdminDemandDashboard />;
       case 'analytics':
         return <AnalyticsSection />;
       case 'users':

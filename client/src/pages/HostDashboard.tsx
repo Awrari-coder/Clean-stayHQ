@@ -12,6 +12,7 @@ import { ConnectCalendar } from "@/components/ConnectCalendar";
 import { useLocation } from "wouter";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { HostCalendarSettings } from "@/components/HostCalendarSettings";
+import { HostPropertiesManager } from "@/components/HostPropertiesManager";
 
 function BookingsSection() {
   const { data: bookings = [], isLoading } = useHostBookings();
@@ -168,6 +169,7 @@ export default function HostDashboard() {
   const syncMutation = useHostSync();
 
   const getSection = () => {
+    if (location.startsWith('/host/properties')) return 'properties';
     if (location.startsWith('/host/bookings')) return 'bookings';
     if (location.startsWith('/host/payments')) return 'payments';
     if (location.startsWith('/host/calendar')) return 'calendar';
@@ -208,6 +210,8 @@ export default function HostDashboard() {
 
   const renderSection = () => {
     switch (section) {
+      case 'properties':
+        return <HostPropertiesManager />;
       case 'bookings':
         return <BookingsSection />;
       case 'payments':

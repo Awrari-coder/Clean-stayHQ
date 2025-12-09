@@ -1,0 +1,351 @@
+Awesome. Let’s give Replit one clean, comprehensive spec for the “Property + Demand Engine” upgrade.
+
+This will add:
+
+1. Add / Manage Properties (Host)
+
+
+2. Admin Demand Dashboard (incoming bookings)
+
+
+3. Admin Manual Dispatch & Re-Assign (override auto assignment)
+
+
+
+All consistent with your existing schema (users, properties, bookings, cleaner_jobs, payments) and stack (Node/Express, Neon Postgres, Drizzle/Prisma, React dashboards, Twilio/Resend, JWT).
+
+
+---
+
+🔧 REPLIT PROMPT — Build the Property + Demand Engine
+
+> 👉 Copy-paste everything below into your Replit Agent:
+
+
+
+Implement the “Property + Demand Engine” for the CleanStay project.
+
+Goal:
+Complete the full flow:
+Host registers → adds properties → connects calendar → bookings sync → jobs created → admin sees demand → admin can assign / reassign cleaners → cleaners see their jobs.
+
+This work must integrate with the existing codebase:
+- Node/Express backend
+- Neon Postgres (DATABASE_URL already updated)
+- Tables: users, properties, bookings, cleaner_jobs, payments, sync_logs
+- JWT auth middleware + role-based routes
+- Existing iCal sync + job auto-assignment + notifications + payouts
+- Existing React dashboards (Host, Cleaner, Admin)
+
+====================================================
+MODULE 1 — HOST PROPERTY MANAGEMENT
+====================================================
+
+A. DATABASE
+
+We already have a `properties` table with:
+
+id, host_id, name, address, city, state, zip, latitude, longitude,
+airbnb_property_id, created_at, ical_url
+
+No schema change is required, but please make sure Drizzle/Prisma models are up to date with Neon.
+
+B. BACKEND ROUTES (Host)
+
+Base path: /api/host
+Use existing authMiddleware + requireRole('host').
+
+1) GET /api/host/properties
+- Already exists; ensure it returns ONLY properties where host_id = req.user.id.
+- Response fields:
+  id, name, address, city, state, zip, latitude, longitude,
+  airbnb_property_id, ical_url, created_at,
+  last_sync_at, last_sync_status, last_sync_message (if those columns exist; if not, just return current fields).
+
+2) POST /api/host/properties
+Body:
+{
+  "name": string,
+  "address": string,
+  "city": string,
+  "state": string,
+  "zip": string,
+  "latitude"?: number,
+  "longitude"?: number,
+  "airbnbPropertyId"?: string,
+  "icalUrl"?: string
+}
+
+Behavior:
+- Insert new row into properties with:
+  host_id = req.user.id
+  created_at = now()
+- Return created property.
+
+3) PUT /api/host/properties/:id
+Body: same as POST (all fields optional).
+Behavior:
+- Ensure property.host_id = req.user.id.
+- Update fields present in body.
+- Return updated property.
+
+4) DELETE /api/host/properties/:id  (optional but useful)
+Behavior:
+- Ensure property.host_id = req.user.id.
+- Only allow delete if there are no bookings referencing this property, OR perform a soft delete (add `archived` boolean column if needed).
+- For MVP you can disallow delete if bookings exist.
+
+C. FRONTEND UI — Host “Properties” Page
+
+1) Add a new navigation item for hosts:
+- In Host sidebar config: add “Properties” → `/host/properties`.
+
+2) New page: `client/src/pages/host/properties.tsx` (or similar):
+
+- Fetch properties via GET /api/host/properties.
+- Show list:
+
+  Columns:
+  - Property name
+  - Address (city, state)
+  - iCal status (if available: last_sync_status / "Not connected")
+  - Created date
+  - Actions: [Edit] [Connect Calendar] (optional) [Delete] (if allowed)
+
+- Add “Add Property” button:
+
+  Modal or separate form with fields:
+  - Name (required)
+  - Address (required)
+  - City (default “Austin”)
+  - State (default “TX”)
+  - Zip
+  - Optional: lat/lng
+  - Optional: iCal URL
+
+  On submit → POST /api/host/properties, then refresh list.
+
+- Edit button:
+  - Opens same form prefilled; on submit → PUT /api/host/properties/:id.
+
+Note: Integrate iCal URL field with existing calendar logic if possible, but host settings page can also manage iCal separately (reuse existing endpoints if they are already created).
+
+====================================================
+MODULE 2 — ADMIN DEMAND DASHBOARD
+====================================================
+
+We want a clear view of “incoming demand” (bookings that need or have cleaning jobs).
+
+A. BACKEND ROUTES (Admin)
+
+Base path: /api/admin
+Use requireRole('admin').
+
+1) GET /api/admin/demand
+
+Query parameters (optional):
+- from (ISO date) – default = today
+- to (ISO date) – default = today + 14 days
+- status (string; "all" | "needs_assignment" | "assigned" | "completed")
+
+Behavior:
+
+- Join bookings with:
+  - properties (for property info)
+  - cleaner_jobs (LEFT JOIN; there may be 0 or 1 job per booking for now)
+  - assigned cleaner (users table, LEFT JOIN on cleaner_jobs.assigned_cleaner_id)
+
+- Filter by:
+  - bookings.check_out BETWEEN from and to (or check_in, whichever is used as cleaning date – for now use check_out as demand date).
+- Determine derived “demandStatus” for each row:
+
+  demandStatus:
+    - "needs_assignment" if:
+        - there is no cleaner_jobs row, OR
+        - cleaner_jobs.status = 'unassigned'
+    - "assigned" if:
+        - cleaner_jobs.status IN ('assigned', 'accepted', 'in-progress')
+    - "completed" if:
+        - cleaner_jobs.status = 'completed'
+      (Also treat bookings.cleaning_status = 'completed' as completed.)
+
+- Return list of objects:
+
+{
+  "bookingId": number,
+  "jobId": number | null,
+  "propertyId": number,
+  "propertyName": string,
+  "address": string,
+  "hostName": string,
+  "guestName": string,
+  "checkIn": string,
+  "checkOut": string,
+  "amount": number,
+  "bookingStatus": booking_status,
+  "cleaningStatus": cleaning_status,
+  "demandStatus": "needs_assignment" | "assigned" | "completed",
+  "assignedCleanerName": string | null
+}
+
+2) GET /api/admin/jobs/unassigned
+
+- Return list of cleaner_jobs rows where status = 'unassigned' OR jobs attached to bookings with demandStatus='needs_assignment'.
+- Include joined booking, property and host info.
+
+B. FRONTEND UI — Admin “Demand” View
+
+1) Add new sidebar item for admin:
+
+- “Demand” → `/admin/demand`
+
+2) New page: `client/src/pages/admin/demand.tsx`:
+
+- Filters at top:
+  - Date range (default: today → today + 14 days)
+  - Status filter: All / Needs Assignment / Assigned / Completed
+
+- Fetch data from GET /api/admin/demand with selected filters.
+
+- Render a table:
+
+Columns:
+- Date (check_out)
+- Property
+- Guest
+- Host
+- Booking amount
+- Demand status badge
+- Assigned cleaner (or “Unassigned”)
+- Actions
+
+Actions:
+- If demandStatus = "needs_assignment" → Show [Assign Cleaner] button
+- If demandStatus = "assigned" or "completed" → Show [Reassign] button (optional now, but keep in UI for consistency)
+
+====================================================
+MODULE 3 — ADMIN MANUAL DISPATCH / REASSIGN
+====================================================
+
+A. BACKEND ROUTES (Admin)
+
+1) GET /api/admin/cleaners
+
+- Return list of all users where role IN ('cleaner', 'cleaning_company') with basic info:
+  id, name, role, phone, email, company_id (if any).
+
+2) GET /api/admin/jobs/:bookingId/candidates
+
+- Given a bookingId (for which admin wants to assign a job):
+  - Option A: use existing scheduler service’s "getEligibleCleaners" if available.
+  - Option B (simple for now): return all cleaners (same as /cleaners) and optionally include simple eligibility info:
+
+For each candidate:
+{
+  cleanerId,
+  name,
+  role,
+  hasConflict (boolean) – true if they already have a job overlapping the booking’s cleaning window,
+  existingJobsCountForDay,
+}
+
+- This endpoint is to populate the “Assign Cleaner” modal.
+
+3) POST /api/admin/jobs/:bookingId/assign
+
+Body: { cleanerId: number }
+
+Behavior:
+
+- Find booking by bookingId.
+- If no cleaner_jobs row exists for this booking:
+  - Create new cleaner_jobs row:
+    booking_id = bookingId
+    assigned_cleaner_id = cleanerId
+    status = 'assigned'
+    scheduled_date = booking.check_out (or computed cleaning date)
+    payout_amount = (existing logic or default)
+- If cleaner_jobs row exists:
+  - Update assigned_cleaner_id = cleanerId
+  - Set status = 'assigned' (unless it's already 'in-progress' or 'completed'; for now treat as 'assigned' if not completed).
+
+- After assigning:
+  - Call notificationsService.notifyNewJobAssigned(jobId)
+  - Return updated job object.
+
+B. FRONTEND UI — Assign/Reassign Modal
+
+On `/admin/demand` page:
+
+- When clicking [Assign Cleaner] or [Reassign], open a modal.
+
+Modal behavior:
+
+1) Call GET `/api/admin/jobs/:bookingId/candidates`.
+2) Show list with each candidate cleaner:
+   - Name
+   - Role (Cleaner / Company)
+   - Jobs count that day
+   - Conflict badge if any (optional)
+3) On selecting a candidate and clicking “Assign”:
+   - POST `/api/admin/jobs/:bookingId/assign` with { cleanerId }.
+   - On success, close modal and refresh demand table.
+
+C. KEEP AUTO-ASSIGNMENT
+
+Do NOT remove existing auto-assignment logic.
+
+- Auto scheduler keeps running as is for regular bookings.
+- Admin dispatch panel acts as:
+  - Fallback when auto assignment fails (no suitable cleaner).
+  - Override when admin wants to change assigned cleaner.
+
+If a job already exists and is assigned but admin reassigns, admin action wins.
+
+====================================================
+GENERAL INTEGRATION NOTES
+====================================================
+
+- Ensure all new routes use existing `authMiddleware` and `requireRole` helpers.
+- Make sure Drizzle/Prisma models reflect the Neon schema (if needed, run introspection or update schema manually).
+- Use TypeScript types consistent with existing patterns.
+
+- After implementation, test these flows with demo accounts:
+
+1) Host (sarah@example.com):
+   - Log in
+   - Go to Properties
+   - Add new property
+   - Confirm it appears in list and that bookings created later can reference it.
+
+2) Admin (admin@example.com):
+   - Log in
+   - Go to Demand page
+   - See list of bookings (pre-populated from existing seed data)
+   - Filter to “Needs Assignment”
+   - Click “Assign Cleaner”
+   - Pick Mike Cleaner
+   - Confirm job created/updated and cleaner sees it in their dashboard.
+
+3) Cleaner (mike@example.com):
+   - Log in
+   - Confirm newly assigned job appears under “My Tasks”.
+
+Provide a short summary of:
+- Files created/updated
+- New routes added
+- How to use the new Admin Demand + Dispatch features.
+
+
+---
+
+When the Agent finishes this, you’ll have:
+
+A real host property management flow
+
+A central Admin demand dashboard
+
+A manual dispatch + reassignment system
+
+
+That’s the “core engine” your product needs to feel complete and operational.

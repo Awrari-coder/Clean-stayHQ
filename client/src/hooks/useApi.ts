@@ -340,3 +340,79 @@ export function useDeleteTimeOff() {
     },
   });
 }
+
+// ===== HOST PROPERTY MANAGEMENT =====
+export function useCreateProperty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; address: string; city?: string; state?: string; zip?: string; icalUrl?: string }) => 
+      postJson<Property>(`${API_BASE}/host/properties`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "properties"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
+export function useUpdateProperty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<{ name: string; address: string; city: string; state: string; zip: string; icalUrl: string }> }) => 
+      putJson<Property>(`${API_BASE}/host/properties/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "properties"] });
+    },
+  });
+}
+
+export function useDeleteProperty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteJson(`${API_BASE}/host/properties/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "properties"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
+// ===== ADMIN DEMAND & DISPATCH =====
+export function useAdminDemand(from?: string, to?: string, status?: string) {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (status) params.set("status", status);
+  const queryString = params.toString();
+  
+  return useQuery({
+    queryKey: ["admin", "demand", from, to, status],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/demand${queryString ? `?${queryString}` : ""}`),
+  });
+}
+
+export function useAdminCleaners() {
+  return useQuery({
+    queryKey: ["admin", "cleaners"],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/cleaners`),
+  });
+}
+
+export function useJobCandidates(bookingId: number | null) {
+  return useQuery({
+    queryKey: ["admin", "candidates", bookingId],
+    queryFn: () => fetchJson<any[]>(`${API_BASE}/admin/jobs/${bookingId}/candidates`),
+    enabled: !!bookingId,
+  });
+}
+
+export function useAssignJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, cleanerId }: { bookingId: number; cleanerId: number }) => 
+      postJson(`${API_BASE}/admin/jobs/${bookingId}/assign`, { cleanerId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "demand"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    },
+  });
+}

@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import { getIntegrationStatus } from "../services/airbnbService";
 import { getAllPayoutsWithDetails, markPayoutPaid } from "../services/paymentsService";
+import { notifyNewJobAssigned } from "../services/notificationsService";
 
 const router = Router();
 
@@ -225,6 +226,205 @@ router.post("/payouts/:id/mark-paid", async (req: AuthRequest, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to mark payout as paid" });
+  }
+});
+
+// GET /api/admin/demand - Get demand dashboard data (bookings needing cleaning)
+router.get("/demand", async (req: AuthRequest, res) => {
+  try {
+    const fromParam = req.query.from as string;
+    const toParam = req.query.to as string;
+    const statusFilter = req.query.status as string || "all";
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Validate date parameters
+    let from = today;
+    let to = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+    
+    if (fromParam) {
+      const parsedFrom = new Date(fromParam);
+      if (!isNaN(parsedFrom.getTime())) {
+        from = parsedFrom;
+      }
+    }
+    if (toParam) {
+      const parsedTo = new Date(toParam);
+      if (!isNaN(parsedTo.getTime())) {
+        to = parsedTo;
+      }
+    }
+    
+    const demandData = await storage.getDemandWithDetails(from, to);
+    
+    // Get host and cleaner names
+    const users = await storage.getAllUsers();
+    const userMap = new Map(users.map(u => [u.id, u.name]));
+    
+    // Deduplicate by bookingId (in case of multiple jobs per booking) and transform
+    const bookingMap = new Map<number, any>();
+    
+    for (const d of demandData) {
+      // If we haven't seen this booking, or if this job has a higher status, use it
+      const existing = bookingMap.get(d.bookingId);
+      if (!existing || (d.jobId && (!existing.jobId || d.jobId > existing.jobId))) {
+        let demandStatus: "needs_assignment" | "assigned" | "completed";
+        
+        if (d.cleaningStatus === "completed" || d.jobStatus === "completed") {
+          demandStatus = "completed";
+        } else if (!d.jobId || d.jobStatus === "unassigned") {
+          demandStatus = "needs_assignment";
+        } else {
+          demandStatus = "assigned";
+        }
+        
+        bookingMap.set(d.bookingId, {
+          bookingId: d.bookingId,
+          jobId: d.jobId,
+          propertyId: d.propertyId,
+          propertyName: d.propertyName,
+          address: `${d.address}, ${d.city}`,
+          hostName: userMap.get(d.hostId) || "Unknown",
+          guestName: d.guestName,
+          checkIn: d.checkIn,
+          checkOut: d.checkOut,
+          amount: parseFloat(d.amount),
+          bookingStatus: d.bookingStatus,
+          cleaningStatus: d.cleaningStatus,
+          demandStatus,
+          assignedCleanerId: d.assignedCleanerId,
+          assignedCleanerName: d.assignedCleanerId ? userMap.get(d.assignedCleanerId) : null,
+        });
+      }
+    }
+    
+    const result = Array.from(bookingMap.values());
+    
+    // Apply status filter
+    const filtered = statusFilter === "all" 
+      ? result 
+      : result.filter(r => r.demandStatus === statusFilter);
+    
+    res.json(filtered);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch demand data" });
+  }
+});
+
+// GET /api/admin/cleaners - Get all cleaners
+router.get("/cleaners", async (req: AuthRequest, res) => {
+  try {
+    const cleaners = await storage.getAllCleaners();
+    const sanitized = cleaners.map(c => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      role: c.role,
+      companyId: c.companyId,
+    }));
+    res.json(sanitized);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch cleaners" });
+  }
+});
+
+// GET /api/admin/jobs/:bookingId/candidates - Get candidate cleaners for a booking
+router.get("/jobs/:bookingId/candidates", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.bookingId);
+    const booking = await storage.getBooking(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    const cleaners = await storage.getAllCleaners();
+    const cleaningDate = booking.checkOut;
+    
+    // Get each cleaner's job count for that day
+    const candidates = await Promise.all(cleaners.map(async (cleaner) => {
+      const dayJobs = await storage.getCleanerJobsForDate(cleaner.id, cleaningDate);
+      const hasConflict = dayJobs.some(j => {
+        // Check if any job is for the same time slot (simplified check)
+        return j.bookingId === bookingId;
+      });
+      
+      return {
+        cleanerId: cleaner.id,
+        name: cleaner.name,
+        email: cleaner.email,
+        phone: cleaner.phone,
+        role: cleaner.role,
+        existingJobsCountForDay: dayJobs.length,
+        hasConflict,
+      };
+    }));
+    
+    res.json(candidates);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch candidates" });
+  }
+});
+
+// POST /api/admin/jobs/:bookingId/assign - Assign or reassign a cleaner to a booking
+router.post("/jobs/:bookingId/assign", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.bookingId);
+    const { cleanerId } = req.body;
+    
+    if (!cleanerId) {
+      return res.status(400).json({ error: "cleanerId is required" });
+    }
+    
+    const booking = await storage.getBooking(bookingId);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    const cleaner = await storage.getUser(cleanerId);
+    if (!cleaner || (cleaner.role !== "cleaner" && cleaner.role !== "cleaning_company")) {
+      return res.status(400).json({ error: "Invalid cleaner" });
+    }
+    
+    // Check if job already exists for this booking
+    let job = await storage.getJobByBookingId(bookingId);
+    
+    if (job) {
+      // Update existing job
+      job = await storage.updateJobAssignment(job.id, cleanerId);
+    } else {
+      // Create new job
+      const property = await storage.getProperty(booking.propertyId);
+      const payoutAmount = 75; // Default payout, could be property-specific
+      
+      job = await storage.createCleanerJob({
+        bookingId,
+        assignedCleanerId: cleanerId,
+        status: "assigned",
+        payoutAmount: payoutAmount.toString(),
+        scheduledDate: booking.checkOut,
+      });
+    }
+    
+    // Update booking cleaning status
+    await storage.updateBookingStatus(bookingId, booking.status, "scheduled");
+    
+    // Send notification to cleaner
+    if (job) {
+      notifyNewJobAssigned(job.id).catch(err => 
+        console.error("[Admin Dispatch] Failed to notify cleaner:", err)
+      );
+    }
+    
+    res.json({ success: true, job });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to assign job" });
   }
 });
 

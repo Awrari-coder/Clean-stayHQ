@@ -48,7 +48,11 @@ export interface IStorage {
   // Properties
   getProperty(id: number): Promise<Property | undefined>;
   getPropertiesByHost(hostId: number): Promise<Property[]>;
+  getAllProperties(): Promise<Property[]>;
   createProperty(property: InsertProperty): Promise<Property>;
+  updateProperty(id: number, data: Partial<InsertProperty>): Promise<Property | undefined>;
+  deleteProperty(id: number): Promise<boolean>;
+  hasBookingsForProperty(propertyId: number): Promise<boolean>;
   updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined>;
   updatePropertySyncStatus(id: number, status: string, message: string): Promise<Property | undefined>;
   getSyncLogsByPropertyIds(propertyIds: number[], limit?: number): Promise<SyncLog[]>;
@@ -64,14 +68,19 @@ export interface IStorage {
   
   // Cleaner Jobs
   getCleanerJob(id: number): Promise<CleanerJob | undefined>;
+  getJobByBookingId(bookingId: number): Promise<CleanerJob | undefined>;
   getJobsByCleaner(cleanerId: number): Promise<(CleanerJob & { propertyName?: string; address?: string })[]>;
   getJobsByCompany(companyId: number): Promise<(CleanerJob & { propertyName?: string; address?: string })[]>;
   getAllJobs(): Promise<CleanerJob[]>;
   getAllJobsWithDetails(): Promise<any[]>;
   createCleanerJob(job: InsertCleanerJob): Promise<CleanerJob>;
   updateJobStatus(id: number, status: string): Promise<CleanerJob | undefined>;
+  updateJobAssignment(id: number, cleanerId: number): Promise<CleanerJob | undefined>;
   completeJob(id: number): Promise<CleanerJob | undefined>;
   completeJobWithNotes(id: number, notes?: string): Promise<CleanerJob | undefined>;
+  getDemandWithDetails(from: Date, to: Date): Promise<any[]>;
+  getAllCleaners(): Promise<User[]>;
+  getCleanerJobsForDate(cleanerId: number, date: Date): Promise<CleanerJob[]>;
   
   // Payments
   getPayment(id: number): Promise<Payment | undefined>;
@@ -161,6 +170,30 @@ export class DatabaseStorage implements IStorage {
   async createProperty(insertProperty: InsertProperty): Promise<Property> {
     const [property] = await db.insert(properties).values(insertProperty).returning();
     return property;
+  }
+
+  async getAllProperties(): Promise<Property[]> {
+    return await db.select().from(properties);
+  }
+
+  async updateProperty(id: number, data: Partial<InsertProperty>): Promise<Property | undefined> {
+    const [property] = await db.update(properties)
+      .set(data)
+      .where(eq(properties.id, id))
+      .returning();
+    return property || undefined;
+  }
+
+  async deleteProperty(id: number): Promise<boolean> {
+    await db.delete(properties).where(eq(properties.id, id));
+    return true;
+  }
+
+  async hasBookingsForProperty(propertyId: number): Promise<boolean> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(bookings)
+      .where(eq(bookings.propertyId, propertyId));
+    return (result[0]?.count || 0) > 0;
   }
 
   async updatePropertyIcalUrl(id: number, icalUrl: string): Promise<Property | undefined> {
@@ -386,6 +419,75 @@ export class DatabaseStorage implements IStorage {
       .where(eq(cleanerJobs.id, id))
       .returning();
     return job || undefined;
+  }
+
+  async getJobByBookingId(bookingId: number): Promise<CleanerJob | undefined> {
+    const [job] = await db.select().from(cleanerJobs).where(eq(cleanerJobs.bookingId, bookingId));
+    return job || undefined;
+  }
+
+  async updateJobAssignment(id: number, cleanerId: number): Promise<CleanerJob | undefined> {
+    const [job] = await db.update(cleanerJobs)
+      .set({ 
+        assignedCleanerId: cleanerId,
+        status: 'assigned'
+      })
+      .where(eq(cleanerJobs.id, id))
+      .returning();
+    return job || undefined;
+  }
+
+  async getDemandWithDetails(from: Date, to: Date): Promise<any[]> {
+    const result = await db.select({
+      bookingId: bookings.id,
+      propertyId: bookings.propertyId,
+      propertyName: properties.name,
+      address: properties.address,
+      city: properties.city,
+      hostId: properties.hostId,
+      guestName: bookings.guestName,
+      checkIn: bookings.checkIn,
+      checkOut: bookings.checkOut,
+      amount: bookings.amount,
+      bookingStatus: bookings.status,
+      cleaningStatus: bookings.cleaningStatus,
+      jobId: cleanerJobs.id,
+      jobStatus: cleanerJobs.status,
+      assignedCleanerId: cleanerJobs.assignedCleanerId,
+    })
+    .from(bookings)
+    .innerJoin(properties, eq(bookings.propertyId, properties.id))
+    .leftJoin(cleanerJobs, eq(cleanerJobs.bookingId, bookings.id))
+    .where(
+      and(
+        sql`${bookings.checkOut} >= ${from}`,
+        sql`${bookings.checkOut} <= ${to}`
+      )
+    )
+    .orderBy(bookings.checkOut);
+    
+    return result;
+  }
+
+  async getAllCleaners(): Promise<User[]> {
+    return await db.select().from(users)
+      .where(sql`${users.role} IN ('cleaner', 'cleaning_company')`);
+  }
+
+  async getCleanerJobsForDate(cleanerId: number, date: Date): Promise<CleanerJob[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return await db.select().from(cleanerJobs)
+      .where(
+        and(
+          eq(cleanerJobs.assignedCleanerId, cleanerId),
+          sql`${cleanerJobs.scheduledDate} >= ${startOfDay}`,
+          sql`${cleanerJobs.scheduledDate} <= ${endOfDay}`
+        )
+      );
   }
 
   // Payments

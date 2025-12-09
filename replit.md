@@ -194,6 +194,21 @@ The application follows a monorepo structure with clear separation between clien
 - Scheduler integration: filters cleaners by availability windows
 - Respects time-off when assigning jobs
 
+### Host Property Management
+- Full CRUD operations for host properties at `/host/properties`
+- HostPropertiesManager component with add/edit/delete functionality
+- Properties include name, address, city, state, zip, and optional iCal URL
+- Security: Property updates whitelist only editable fields (prevents hostId manipulation)
+- Deletion blocked when bookings exist for the property
+
+### Admin Demand Dashboard & Job Dispatch
+- Admin demand view at `/admin/demand` showing all bookings needing cleaning
+- Date range filtering with "needs_assignment", "assigned", "completed" status filters
+- Manual job dispatch: admin can assign any cleaner to any booking
+- Cleaner candidate list shows availability and conflict detection
+- Job assignment creates cleaner job and triggers SMS/email notifications
+- Storage layer deduplicates bookings to prevent duplicate entries
+
 ### Database Schema Additions
 - `cleanerAvailability` - Weekly work schedule per cleaner
 - `cleanerTimeOff` - Date ranges when cleaner is unavailable

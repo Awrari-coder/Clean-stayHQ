@@ -21,6 +21,108 @@ router.get("/properties", async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/host/properties - Create a new property
+router.post("/properties", async (req: AuthRequest, res) => {
+  try {
+    const { name, address, city, state, zip, latitude, longitude, airbnbPropertyId, icalUrl } = req.body;
+    
+    if (!name || !address) {
+      return res.status(400).json({ error: "Name and address are required" });
+    }
+    
+    const property = await storage.createProperty({
+      hostId: req.user!.id,
+      name,
+      address,
+      city: city || "Austin",
+      state: state || "TX",
+      zip: zip || "",
+      latitude: latitude || null,
+      longitude: longitude || null,
+      airbnbPropertyId: airbnbPropertyId || null,
+      icalUrl: icalUrl || null,
+    });
+    
+    res.status(201).json(property);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create property" });
+  }
+});
+
+// PUT /api/host/properties/:id - Update a property
+router.put("/properties/:id", async (req: AuthRequest, res) => {
+  try {
+    const propertyId = parseInt(req.params.id);
+    
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+    
+    const { name, address, city, state, zip, latitude, longitude, airbnbPropertyId, icalUrl } = req.body;
+    
+    // Whitelist only editable fields - NEVER allow hostId or createdAt to be modified
+    const updateData: {
+      name?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      latitude?: string | null;
+      longitude?: string | null;
+      airbnbPropertyId?: string | null;
+      icalUrl?: string | null;
+    } = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (address !== undefined) updateData.address = address;
+    if (city !== undefined) updateData.city = city;
+    if (state !== undefined) updateData.state = state;
+    if (zip !== undefined) updateData.zip = zip;
+    if (latitude !== undefined) updateData.latitude = latitude;
+    if (longitude !== undefined) updateData.longitude = longitude;
+    if (airbnbPropertyId !== undefined) updateData.airbnbPropertyId = airbnbPropertyId;
+    if (icalUrl !== undefined) updateData.icalUrl = icalUrl;
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+    
+    const updated = await storage.updateProperty(propertyId, updateData);
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update property" });
+  }
+});
+
+// DELETE /api/host/properties/:id - Delete a property
+router.delete("/properties/:id", async (req: AuthRequest, res) => {
+  try {
+    const propertyId = parseInt(req.params.id);
+    
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+    
+    // Check if property has bookings
+    const hasBookings = await storage.hasBookingsForProperty(propertyId);
+    if (hasBookings) {
+      return res.status(400).json({ error: "Cannot delete property with existing bookings" });
+    }
+    
+    await storage.deleteProperty(propertyId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete property" });
+  }
+});
+
 // POST /api/host/properties/:id/ical - Save iCal URL for a property (legacy)
 router.post("/properties/:id/ical", async (req: AuthRequest, res) => {
   try {
