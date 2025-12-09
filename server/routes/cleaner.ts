@@ -4,6 +4,7 @@ import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import type { CleanerJob } from "@shared/schema";
 import { createPayoutForJob, getCleanerPayoutSummary } from "../services/paymentsService";
 import { notifyJobCompleted } from "../services/notificationsService";
+import { logActivity, emitJobCompleted, emitPayoutCreated } from "../services/activityService";
 
 const router = Router();
 
@@ -101,6 +102,32 @@ router.post("/jobs/:id/complete", async (req: AuthRequest, res) => {
     
     // Send notifications to host
     notifyJobCompleted(jobId).catch(err => console.error("[Notifications] Error:", err));
+    
+    // Get property info for activity message
+    const booking = await storage.getBooking(job.bookingId);
+    const property = booking ? await storage.getProperty(booking.propertyId) : null;
+    
+    // Log activity and emit WebSocket events
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: property?.hostId,
+      roleScope: "host",
+      type: "job.completed",
+      message: `Cleaning completed at ${property?.name || 'property'}`,
+      metadata: { jobId, bookingId: job.bookingId },
+    });
+    
+    emitJobCompleted(jobId, req.user!.id, property?.hostId || 0);
+    
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: req.user!.id,
+      roleScope: "cleaner",
+      type: "payout.created",
+      message: `Payout of $${job.payoutAmount} is pending`,
+      metadata: { jobId, amount: job.payoutAmount },
+    });
+    emitPayoutCreated(jobId, req.user!.id, job.payoutAmount);
     
     res.json({ success: true, job: completedJob });
   } catch (error) {

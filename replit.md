@@ -215,3 +215,27 @@ The application follows a monorepo structure with clear separation between clien
 - `properties` extended with `lastSyncAt`, `lastSyncStatus`, `lastSyncMessage`
 - `syncLogs` extended with `propertyId` for granular tracking
 - `users` extended with `emailVerified`, `emailVerificationToken`, `emailVerificationExpires`
+- `activityLogs` - Stores activity events for role-filtered activity feeds
+
+### Real-Time WebSocket Layer
+- **Socket.IO Integration:** WebSocket server with JWT authentication and room-based event routing
+- **Room Architecture:** 
+  - `authenticated` - All logged-in users (for global announcements)
+  - `admin` - Admin-only events
+  - `host:{userId}` - Host-specific events
+  - `cleaner:{userId}` - Cleaner-specific events
+- **Security:** 10-second auth timeout, disconnects unauthenticated clients, broadcasts only to authenticated room
+- **Events:** job.assigned, job.completed, payout.created, property.created/updated/deleted, sync.completed, new_activity
+- **Client Integration:** useSocket hook provides socket context, ActivityFeed component auto-updates
+
+### Activity Feed System
+- **ActivityService (`server/services/activityService.ts`):**
+  - `logActivity()` - Persists activity to database and emits WebSocket event
+  - `emitJobAssigned/emitJobCompleted/emitPayoutCreated` - Role-targeted notifications
+  - Role scoping: admin, host, cleaner, all
+- **API Endpoint:** GET /api/activity/feed - Returns last 30 activities filtered by user role
+- **UI Components:**
+  - ActivityFeed - Real-time scrollable feed with icons per activity type
+  - AnimatedCounter - Framer Motion animated number transitions for stats
+  - SystemHeartbeat - Admin widget showing scheduler and sync health status
+- **Integration:** Activity feeds visible on all role dashboards

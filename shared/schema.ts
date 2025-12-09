@@ -137,6 +137,19 @@ export const cleanerTimeOff = pgTable('cleaner_time_off', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+export const roleScopeEnum = pgEnum('role_scope', ['admin', 'host', 'cleaner', 'all']);
+
+export const activityLogs = pgTable('activity_logs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id),
+  targetUserId: integer('target_user_id').references(() => users.id),
+  roleScope: roleScopeEnum('role_scope').notNull(),
+  type: text('type').notNull(),
+  message: text('message').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -193,6 +206,11 @@ export const insertCleanerTimeOffSchema = createInsertSchema(cleanerTimeOff).omi
   createdAt: true,
 });
 
+export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -226,3 +244,6 @@ export type InsertCleanerAvailability = z.infer<typeof insertCleanerAvailability
 
 export type CleanerTimeOff = typeof cleanerTimeOff.$inferSelect;
 export type InsertCleanerTimeOff = z.infer<typeof insertCleanerTimeOffSchema>;
+
+export type ActivityLog = typeof activityLogs.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;

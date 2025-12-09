@@ -13,6 +13,7 @@ import { useLocation } from "wouter";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { HostCalendarSettings } from "@/components/HostCalendarSettings";
 import { HostPropertiesManager } from "@/components/HostPropertiesManager";
+import { ActivityFeed } from "@/components/ActivityFeed";
 
 function BookingsSection() {
   const { data: bookings = [], isLoading } = useHostBookings();
@@ -373,6 +374,8 @@ export default function HostDashboard() {
                 )}
               </CardContent>
             </Card>
+            
+            <ActivityFeed title="Recent Activity" />
           </>
         );
     }

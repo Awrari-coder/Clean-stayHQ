@@ -4,6 +4,7 @@ import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import { getIntegrationStatus } from "../services/airbnbService";
 import { getAllPayoutsWithDetails, markPayoutPaid } from "../services/paymentsService";
 import { notifyNewJobAssigned } from "../services/notificationsService";
+import { logActivity, emitJobAssigned, emitJobCreated } from "../services/activityService";
 
 const router = Router();
 
@@ -419,12 +420,76 @@ router.post("/jobs/:bookingId/assign", async (req: AuthRequest, res) => {
       notifyNewJobAssigned(job.id).catch(err => 
         console.error("[Admin Dispatch] Failed to notify cleaner:", err)
       );
+      
+      // Log activity and emit WebSocket events
+      const property = await storage.getProperty(booking.propertyId);
+      logActivity({
+        userId: req.user!.id,
+        targetUserId: cleanerId,
+        roleScope: "cleaner",
+        type: "job.assigned",
+        message: `New job assigned at ${property?.name || 'property'}`,
+        metadata: { jobId: job.id, bookingId, propertyId: booking.propertyId },
+      });
+      
+      emitJobAssigned(job.id, cleanerId, property?.hostId || 0);
     }
     
     res.json({ success: true, job });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to assign job" });
+  }
+});
+
+// GET /api/admin/system-status - Get system heartbeat data
+router.get("/system-status", async (req: AuthRequest, res) => {
+  try {
+    const jobs = await storage.getAllJobs();
+    const syncLogs = await storage.getRecentSyncLogs(10);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get last scheduler run (approximate from most recent job creation)
+    const recentJobs = [...jobs].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    const lastSchedulerRunAt = recentJobs.length > 0 ? recentJobs[0].createdAt : null;
+    
+    // Sync logs are already sorted by getRecentSyncLogs
+    const lastCalendarSyncAt = syncLogs.length > 0 ? syncLogs[0].timestamp : null;
+    
+    // Count job statuses
+    const pendingJobsCount = jobs.filter(j => 
+      j.status === "unassigned" || j.status === "assigned"
+    ).length;
+    
+    const todaysJobs = jobs.filter(j => {
+      const jobDate = new Date(j.scheduledDate);
+      return jobDate >= today && jobDate < tomorrow;
+    });
+    
+    const activeJobsToday = todaysJobs.filter(j => 
+      ["assigned", "accepted", "in-progress"].includes(j.status)
+    ).length;
+    
+    const completedJobsToday = todaysJobs.filter(j => 
+      j.status === "completed"
+    ).length;
+    
+    res.json({
+      lastSchedulerRunAt,
+      lastCalendarSyncAt,
+      pendingJobsCount,
+      activeJobsToday,
+      completedJobsToday,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch system status" });
   }
 });
 

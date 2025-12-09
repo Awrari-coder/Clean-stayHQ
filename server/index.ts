@@ -3,9 +3,12 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startScheduler } from "./services/schedulerService";
+import { initializeWebSocket } from "./websocket";
 
 const app = express();
 const httpServer = createServer(app);
+
+initializeWebSocket(httpServer);
 
 declare module "http" {
   interface IncomingMessage {

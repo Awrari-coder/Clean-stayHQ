@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { CleanerAvailability } from "@/components/CleanerAvailability";
+import { ActivityFeed } from "@/components/ActivityFeed";
 
 function ScheduleSection() {
   const { data: jobs = [], isLoading } = useCleanerJobs();
@@ -338,6 +339,8 @@ export default function CleanerDashboard() {
             </div>
           </TabsContent>
         </Tabs>
+        
+        <ActivityFeed title="Recent Activity" />
           </>
         );
     }

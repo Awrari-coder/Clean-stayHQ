@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import { syncHostProperties } from "../services/icalService";
 import { assignCleanersToBookings } from "../services/schedulerService";
+import { logActivity } from "../services/activityService";
 
 const router = Router();
 
@@ -41,6 +42,15 @@ router.post("/properties", async (req: AuthRequest, res) => {
       longitude: longitude || null,
       airbnbPropertyId: airbnbPropertyId || null,
       icalUrl: icalUrl || null,
+    });
+    
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: req.user!.id,
+      roleScope: "host",
+      type: "property.created",
+      message: `Property "${name}" has been added`,
+      metadata: { propertyId: property.id },
     });
     
     res.status(201).json(property);

@@ -12,6 +12,8 @@ import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { AdminDemandDashboard } from "@/components/AdminDemandDashboard";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { SystemHeartbeat } from "@/components/SystemHeartbeat";
 
 function UsersSection() {
   const { data: users = [], isLoading } = useAdminUsers();
@@ -656,6 +658,11 @@ export default function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+        </div>
+        
+        <div className="grid lg:grid-cols-2 gap-6">
+          <SystemHeartbeat />
+          <ActivityFeed title="System Activity" />
         </div>
           </>
         );
