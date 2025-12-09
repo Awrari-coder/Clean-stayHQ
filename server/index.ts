@@ -19,9 +19,9 @@ declare module "http" {
 
 // Initialize Stripe - runs migrations and sets up webhooks
 async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.log('[Stripe] DATABASE_URL not found, skipping Stripe initialization');
+    console.log('[Stripe] No database URL found, skipping Stripe initialization');
     return;
   }
 
