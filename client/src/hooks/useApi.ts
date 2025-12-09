@@ -92,6 +92,24 @@ export function useHostSync() {
   });
 }
 
+export function useCreateBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      propertyId: number;
+      guestName: string;
+      checkIn: string;
+      checkOut: string;
+      amount: number;
+      specialInstructions?: string;
+    }) => postJson(`${API_BASE}/host/bookings`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
 // ===== CLEANER ROUTES =====
 export function useCleanerJobs() {
   return useQuery({

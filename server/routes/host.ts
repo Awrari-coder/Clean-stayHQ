@@ -232,6 +232,54 @@ router.get("/bookings", async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/host/bookings - Create a new booking manually
+router.post("/bookings", async (req: AuthRequest, res) => {
+  try {
+    const { propertyId, guestName, checkIn, checkOut, amount, specialInstructions } = req.body;
+    
+    if (!propertyId || !guestName || !checkIn || !checkOut || amount === undefined) {
+      return res.status(400).json({ error: "Property, guest name, dates, and amount are required" });
+    }
+    
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+    
+    const booking = await storage.createBooking({
+      propertyId,
+      guestName,
+      checkIn: new Date(checkIn),
+      checkOut: new Date(checkOut),
+      amount: amount.toString(),
+      specialInstructions: specialInstructions || null,
+      status: "confirmed",
+      cleaningStatus: "pending",
+    });
+    
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: req.user!.id,
+      roleScope: "host",
+      type: "booking.created",
+      message: `New booking for ${guestName} at ${property.name}`,
+      metadata: { bookingId: booking.id, propertyId },
+    });
+    
+    // Auto-assign cleaners to new booking
+    const assignedCount = await assignCleanersToBookings();
+    
+    res.status(201).json({ 
+      booking,
+      jobsAssigned: assignedCount
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create booking" });
+  }
+});
+
 // GET /api/host/payments - Get payments for this host
 router.get("/payments", async (req: AuthRequest, res) => {
   try {

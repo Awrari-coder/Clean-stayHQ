@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings } from "lucide-react";
-import { useHostBookings, useHostStats, useHostSync, useHostProperties } from "@/hooks/useApi";
+import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings, Plus } from "lucide-react";
+import { useHostBookings, useHostStats, useHostSync, useHostProperties, useCreateBooking } from "@/hooks/useApi";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -14,13 +14,145 @@ import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { HostCalendarSettings } from "@/components/HostCalendarSettings";
 import { HostPropertiesManager } from "@/components/HostPropertiesManager";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState } from "react";
 
 function BookingsSection() {
-  const { data: bookings = [], isLoading } = useHostBookings();
+  const { data: bookings = [], isLoading, refetch } = useHostBookings();
+  const { data: properties = [] } = useHostProperties();
+  const createBooking = useCreateBooking();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    propertyId: "",
+    guestName: "",
+    checkIn: "",
+    checkOut: "",
+    amount: "",
+    specialInstructions: "",
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.propertyId || !formData.guestName || !formData.checkIn || !formData.checkOut || !formData.amount) {
+      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+    
+    createBooking.mutate({
+      propertyId: parseInt(formData.propertyId),
+      guestName: formData.guestName,
+      checkIn: formData.checkIn,
+      checkOut: formData.checkOut,
+      amount: parseFloat(formData.amount),
+      specialInstructions: formData.specialInstructions || undefined,
+    }, {
+      onSuccess: () => {
+        toast({ title: "Booking created", description: "A cleaner will be automatically assigned if available." });
+        setDialogOpen(false);
+        setFormData({ propertyId: "", guestName: "", checkIn: "", checkOut: "", amount: "", specialInstructions: "" });
+        refetch();
+      },
+      onError: () => {
+        toast({ title: "Failed to create booking", variant: "destructive" });
+      }
+    });
+  };
   
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">My Bookings</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">My Bookings</h1>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-booking">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Booking
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Booking</DialogTitle>
+              <DialogDescription>Create a manual booking for one of your properties</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="property">Property *</Label>
+                <Select value={formData.propertyId} onValueChange={(v) => setFormData(f => ({ ...f, propertyId: v }))}>
+                  <SelectTrigger data-testid="select-property">
+                    <SelectValue placeholder="Select a property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {properties.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="guestName">Guest Name *</Label>
+                <Input
+                  id="guestName"
+                  data-testid="input-guest-name"
+                  value={formData.guestName}
+                  onChange={(e) => setFormData(f => ({ ...f, guestName: e.target.value }))}
+                  placeholder="Guest name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="checkIn">Check In *</Label>
+                  <Input
+                    id="checkIn"
+                    type="date"
+                    data-testid="input-check-in"
+                    value={formData.checkIn}
+                    onChange={(e) => setFormData(f => ({ ...f, checkIn: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="checkOut">Check Out *</Label>
+                  <Input
+                    id="checkOut"
+                    type="date"
+                    data-testid="input-check-out"
+                    value={formData.checkOut}
+                    onChange={(e) => setFormData(f => ({ ...f, checkOut: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amount">Booking Amount ($) *</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  data-testid="input-amount"
+                  value={formData.amount}
+                  onChange={(e) => setFormData(f => ({ ...f, amount: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instructions">Special Instructions</Label>
+                <Input
+                  id="instructions"
+                  data-testid="input-instructions"
+                  value={formData.specialInstructions}
+                  onChange={(e) => setFormData(f => ({ ...f, specialInstructions: e.target.value }))}
+                  placeholder="Optional notes for cleaners"
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={createBooking.isPending} data-testid="button-submit-booking">
+                {createBooking.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Create Booking
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
       <Card className="border-none shadow-md">
         <CardHeader>
           <CardTitle>All Bookings</CardTitle>
@@ -30,7 +162,7 @@ function BookingsSection() {
           {isLoading ? (
             <div className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
           ) : bookings.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No bookings found</div>
+            <div className="text-center py-8 text-muted-foreground">No bookings found. Click "Add Booking" to create one.</div>
           ) : (
             <Table>
               <TableHeader>
