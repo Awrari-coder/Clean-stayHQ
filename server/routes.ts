@@ -7,6 +7,7 @@ import hostRoutes from "./routes/host";
 import cleanerRoutes from "./routes/cleaner";
 import adminRoutes from "./routes/admin";
 import activityRoutes from "./routes/activity";
+import stripeRoutes from "./routes/stripe";
 import { storage } from "./storage";
 
 export async function registerRoutes(
@@ -26,6 +27,7 @@ export async function registerRoutes(
   app.use("/api/cleaner", cleanerRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/activity", activityRoutes);
+  app.use("/api/stripe", stripeRoutes);
   
   // ===== PUBLIC ROUTES (for backward compatibility) =====
   
