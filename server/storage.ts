@@ -62,7 +62,7 @@ export interface IStorage {
   getBooking(id: number): Promise<Booking | undefined>;
   getBookingsByProperty(propertyId: number): Promise<Booking[]>;
   getAllBookings(): Promise<Booking[]>;
-  getBookingsForHost(hostId: number): Promise<(Booking & { propertyName?: string })[]>;
+  getBookingsForHost(hostId: number): Promise<any[]>;
   getAllBookingsWithDetails(): Promise<any[]>;
   createBooking(booking: InsertBooking): Promise<Booking>;
   updateBooking(id: number, data: Partial<InsertBooking>): Promise<Booking | undefined>;
@@ -247,7 +247,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bookings).orderBy(desc(bookings.checkIn));
   }
   
-  async getBookingsForHost(hostId: number): Promise<(Booking & { propertyName?: string })[]> {
+  async getBookingsForHost(hostId: number): Promise<any[]> {
     const hostProperties = await this.getPropertiesByHost(hostId);
     const propertyIds = hostProperties.map(p => p.id);
     
@@ -268,6 +268,16 @@ export class DatabaseStorage implements IStorage {
       hostNotes: bookings.hostNotes,
       checkInChecklist: bookings.checkInChecklist,
       checkOutChecklist: bookings.checkOutChecklist,
+      squareFeet: bookings.squareFeet,
+      bedrooms: bookings.bedrooms,
+      bathrooms: bookings.bathrooms,
+      hasPets: bookings.hasPets,
+      restockRequested: bookings.restockRequested,
+      quoteAmount: bookings.quoteAmount,
+      quoteBreakdown: bookings.quoteBreakdown,
+      paymentStatus: bookings.paymentStatus,
+      paymentReference: bookings.paymentReference,
+      paymentProvider: bookings.paymentProvider,
       createdAt: bookings.createdAt,
       propertyName: properties.name,
     })

@@ -4,6 +4,8 @@ import { authMiddleware, requireRole, AuthRequest } from "../auth";
 import { syncHostProperties } from "../services/icalService";
 import { assignCleanersToBookings } from "../services/schedulerService";
 import { logActivity } from "../services/activityService";
+import { calculateCleaningQuote, calculatePayoutAmount, type QuoteInput } from "../services/quoteService";
+import { sendEmail } from "../services/notificationsService";
 
 const router = Router();
 
@@ -222,7 +224,9 @@ router.get("/bookings", async (req: AuthRequest, res) => {
       check_out: b.checkOut,
       status: b.status,
       cleaning_status: b.cleaningStatus,
-      amount: parseFloat(b.amount),
+      amount: parseFloat(b.amount as string),
+      payment_status: (b as any).paymentStatus || 'pending',
+      cleaning_type: (b as any).cleaningType || 'post_checkout',
     }));
     
     res.json(formatted);
@@ -232,13 +236,14 @@ router.get("/bookings", async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/host/bookings - Create a new booking manually
-router.post("/bookings", async (req: AuthRequest, res) => {
+// POST /api/host/bookings/quote - Get a quote preview without creating a booking
+router.post("/bookings/quote", async (req: AuthRequest, res) => {
   try {
-    const { propertyId, guestName, checkIn, checkOut, amount, specialInstructions } = req.body;
+    const { propertyId, squareFeet, bedrooms, bathrooms, hasPets, restockRequested, cleaningType } = req.body;
     
-    if (!propertyId || !guestName || !checkIn || !checkOut || amount === undefined) {
-      return res.status(400).json({ error: "Property, guest name, dates, and amount are required" });
+    // Validate required fields
+    if (!propertyId || squareFeet === undefined || bedrooms === undefined || bathrooms === undefined) {
+      return res.status(400).json({ error: "Property ID, square feet, bedrooms, and bathrooms are required" });
     }
     
     // Verify the property belongs to this host
@@ -247,13 +252,86 @@ router.post("/bookings", async (req: AuthRequest, res) => {
       return res.status(403).json({ error: "You don't have access to this property" });
     }
     
+    const quoteInput: QuoteInput = {
+      squareFeet: Number(squareFeet),
+      bedrooms: Number(bedrooms),
+      bathrooms: Number(bathrooms),
+      hasPets: Boolean(hasPets),
+      restockRequested: Boolean(restockRequested),
+      cleaningType: cleaningType || 'post_checkout',
+    };
+    
+    const quote = calculateCleaningQuote(quoteInput);
+    res.json(quote);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to calculate quote" });
+  }
+});
+
+// POST /api/host/bookings - Create a new booking (with optional quote-based pricing)
+router.post("/bookings", async (req: AuthRequest, res) => {
+  try {
+    const { 
+      propertyId, guestName, checkIn, checkOut, 
+      squareFeet, bedrooms, bathrooms, hasPets, restockRequested, cleaningType,
+      specialInstructions, hostNotes, autoMarkPaid,
+      amount // Legacy field - if provided, use it directly instead of calculating quote
+    } = req.body;
+    
+    if (!propertyId || !checkIn || !checkOut) {
+      return res.status(400).json({ error: "Property ID and dates are required" });
+    }
+    
+    // Verify the property belongs to this host
+    const property = await storage.getProperty(propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this property" });
+    }
+    
+    // Calculate quote if size fields provided, otherwise use provided amount
+    let quoteAmount: number;
+    let quoteBreakdown: any = null;
+    
+    if (squareFeet !== undefined && bedrooms !== undefined && bathrooms !== undefined) {
+      const quoteInput: QuoteInput = {
+        squareFeet: Number(squareFeet),
+        bedrooms: Number(bedrooms),
+        bathrooms: Number(bathrooms),
+        hasPets: Boolean(hasPets),
+        restockRequested: Boolean(restockRequested),
+        cleaningType: cleaningType || 'post_checkout',
+      };
+      const quote = calculateCleaningQuote(quoteInput);
+      quoteAmount = quote.total;
+      quoteBreakdown = quote.breakdown;
+    } else if (amount !== undefined) {
+      quoteAmount = Number(amount);
+    } else {
+      return res.status(400).json({ error: "Either size details or amount is required" });
+    }
+    
+    const paymentStatus = autoMarkPaid ? 'paid' : 'pending';
+    
     const booking = await storage.createBooking({
       propertyId,
-      guestName,
+      guestName: guestName || 'Guest',
       checkIn: new Date(checkIn),
       checkOut: new Date(checkOut),
-      amount: amount.toString(),
+      amount: quoteAmount.toString(),
       specialInstructions: specialInstructions || null,
+      hostNotes: hostNotes || null,
+      cleaningType: cleaningType || 'post_checkout',
+      squareFeet: squareFeet ? Number(squareFeet) : null,
+      bedrooms: bedrooms ? Number(bedrooms) : null,
+      bathrooms: bathrooms ? Number(bathrooms) : null,
+      hasPets: Boolean(hasPets),
+      restockRequested: Boolean(restockRequested),
+      quoteAmount: quoteAmount.toString(),
+      quoteBreakdown,
+      paymentStatus,
+      paymentReference: autoMarkPaid ? 'HOST_MARKED_PAID' : null,
+      paymentProvider: autoMarkPaid ? 'manual' : null,
       status: "confirmed",
       cleaningStatus: "pending",
     });
@@ -263,20 +341,188 @@ router.post("/bookings", async (req: AuthRequest, res) => {
       targetUserId: req.user!.id,
       roleScope: "host",
       type: "booking.created",
-      message: `New booking for ${guestName} at ${property.name}`,
-      metadata: { bookingId: booking.id, propertyId },
+      message: `New cleaning booking for ${property.name} - $${quoteAmount}`,
+      metadata: { bookingId: booking.id, propertyId, quoteAmount, paymentStatus },
     });
     
-    // Auto-assign cleaners to new booking
-    const assignedCount = await assignCleanersToBookings();
+    let jobsAssigned = 0;
+    let jobCreated = null;
+    
+    // If payment is marked as paid immediately, create job and trigger notifications
+    if (autoMarkPaid) {
+      // Create cleaner job
+      const scheduledDate = cleaningType === 'pre_checkout' 
+        ? new Date(checkOut).setHours(-4) // Day before checkout
+        : new Date(checkOut);
+      
+      jobCreated = await storage.createCleanerJob({
+        bookingId: booking.id,
+        status: 'unassigned',
+        jobType: cleaningType === 'round_trip' ? 'post_checkout' : (cleaningType === 'pre_checkout' ? 'pre_checkout' : 'post_checkout'),
+        payoutAmount: calculatePayoutAmount(quoteAmount).toString(),
+        scheduledDate: new Date(scheduledDate),
+      });
+      
+      // Create deposit payment record
+      await storage.createPayment({
+        userId: req.user!.id,
+        jobId: jobCreated.id,
+        type: 'deposit',
+        amount: quoteAmount.toString(),
+        status: 'completed',
+        description: `Cleaning booking for ${property.name}`,
+      });
+      
+      // Update booking cleaning status
+      await storage.updateBookingStatus(booking.id, 'confirmed', 'scheduled');
+      
+      // Auto-assign cleaners
+      jobsAssigned = await assignCleanersToBookings();
+      
+      // Send email confirmation to host
+      try {
+        await sendEmail(
+          req.user!.email,
+          'Your cleaning has been scheduled',
+          `
+            <h2>Cleaning Scheduled</h2>
+            <p>Your cleaning for <strong>${property.name}</strong> has been booked!</p>
+            <ul>
+              <li><strong>Property:</strong> ${property.name}</li>
+              <li><strong>Date:</strong> ${new Date(checkOut).toLocaleDateString()}</li>
+              <li><strong>Type:</strong> ${cleaningType || 'Post-Checkout'}</li>
+              <li><strong>Amount:</strong> $${quoteAmount.toFixed(2)}</li>
+            </ul>
+            <p>We'll notify you when a cleaner has been assigned.</p>
+          `
+        );
+      } catch (emailErr) {
+        console.error('Failed to send host confirmation email:', emailErr);
+      }
+      
+      // Notify admin
+      logActivity({
+        roleScope: "admin",
+        type: "booking.paid",
+        message: `New paid cleaning booking from ${req.user!.email} for ${property.name} - $${quoteAmount}`,
+        metadata: { bookingId: booking.id, propertyId, quoteAmount },
+      });
+    }
     
     res.status(201).json({ 
-      booking,
-      jobsAssigned: assignedCount
+      booking: {
+        ...booking,
+        paymentStatus,
+        quoteAmount,
+        quoteBreakdown,
+      },
+      jobCreated,
+      jobsAssigned,
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create booking" });
+  }
+});
+
+// POST /api/host/bookings/:id/mark-paid - Mark a booking as paid and create job
+router.post("/bookings/:id/mark-paid", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const booking = await storage.getBooking(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    // Verify the booking belongs to this host's property
+    const property = await storage.getProperty(booking.propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this booking" });
+    }
+    
+    // Check if already paid
+    if ((booking as any).paymentStatus === 'paid') {
+      return res.status(400).json({ error: "Booking is already paid" });
+    }
+    
+    // Update booking payment status
+    const updated = await storage.updateBooking(bookingId, {
+      paymentStatus: 'paid',
+      paymentProvider: 'manual',
+      paymentReference: 'HOST_MARKED_PAID',
+    });
+    
+    // Check if job already exists
+    let job = await storage.getJobByBookingId(bookingId);
+    
+    if (!job) {
+      // Create cleaner job
+      const quoteAmount = Number(booking.quoteAmount || booking.amount);
+      const cleaningType = (booking as any).cleaningType || 'post_checkout';
+      
+      job = await storage.createCleanerJob({
+        bookingId: booking.id,
+        status: 'unassigned',
+        jobType: cleaningType === 'pre_checkout' ? 'pre_checkout' : 'post_checkout',
+        payoutAmount: calculatePayoutAmount(quoteAmount).toString(),
+        scheduledDate: booking.checkOut,
+      });
+      
+      // Create deposit payment record
+      await storage.createPayment({
+        userId: req.user!.id,
+        jobId: job.id,
+        type: 'deposit',
+        amount: quoteAmount.toString(),
+        status: 'completed',
+        description: `Cleaning booking for ${property.name}`,
+      });
+      
+      // Update booking cleaning status
+      await storage.updateBookingStatus(booking.id, 'confirmed', 'scheduled');
+    }
+    
+    // Auto-assign cleaners
+    const jobsAssigned = await assignCleanersToBookings();
+    
+    // Send email confirmation to host
+    try {
+      const quoteAmount = Number(booking.quoteAmount || booking.amount);
+      await sendEmail(
+        req.user!.email,
+        'Your cleaning has been scheduled',
+        `
+          <h2>Payment Confirmed</h2>
+          <p>Your cleaning for <strong>${property.name}</strong> has been confirmed!</p>
+          <ul>
+            <li><strong>Property:</strong> ${property.name}</li>
+            <li><strong>Date:</strong> ${new Date(booking.checkOut).toLocaleDateString()}</li>
+            <li><strong>Amount:</strong> $${quoteAmount.toFixed(2)}</li>
+          </ul>
+          <p>We'll notify you when a cleaner has been assigned.</p>
+        `
+      );
+    } catch (emailErr) {
+      console.error('Failed to send host confirmation email:', emailErr);
+    }
+    
+    // Notify admin
+    logActivity({
+      roleScope: "admin",
+      type: "booking.paid",
+      message: `Booking marked as paid by ${req.user!.email} for ${property.name}`,
+      metadata: { bookingId: booking.id, propertyId: property.id },
+    });
+    
+    res.json({
+      booking: updated,
+      job,
+      jobsAssigned,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to mark booking as paid" });
   }
 });
 
