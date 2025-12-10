@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings, Plus, Eye } from "lucide-react";
+import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings, Plus, Eye, Sparkles } from "lucide-react";
 import { useHostBookings, useHostStats, useHostSync, useHostProperties, useCreateBooking } from "@/hooks/useApi";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ import { HostCalendarSettings } from "@/components/HostCalendarSettings";
 import { HostPropertiesManager } from "@/components/HostPropertiesManager";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { BookingManager } from "@/components/BookingManager";
+import { BookCleaningModal } from "@/components/BookCleaningModal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ function BookingsSection() {
   const { data: properties = [] } = useHostProperties();
   const createBooking = useCreateBooking();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bookCleaningOpen, setBookCleaningOpen] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -73,13 +75,22 @@ function BookingsSection() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">My Bookings</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-booking">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Booking
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => setBookCleaningOpen(true)} 
+            data-testid="button-book-cleaning"
+            className="bg-primary"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Book a Cleaning
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-add-booking">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Booking
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Booking</DialogTitle>
@@ -160,7 +171,17 @@ function BookingsSection() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+      
+      <BookCleaningModal 
+        open={bookCleaningOpen} 
+        onOpenChange={(open) => {
+          setBookCleaningOpen(open);
+          if (!open) refetch();
+        }} 
+      />
+      
       <Card className="border-none shadow-md">
         <CardHeader>
           <CardTitle>All Bookings</CardTitle>

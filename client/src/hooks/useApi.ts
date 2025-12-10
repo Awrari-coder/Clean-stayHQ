@@ -154,6 +154,57 @@ export function useScheduleCleaning() {
   });
 }
 
+export function useGetCleaningQuote() {
+  return useMutation({
+    mutationFn: (data: {
+      propertyId: number;
+      squareFeet: number;
+      bedrooms: number;
+      bathrooms: number;
+      hasPets: boolean;
+      restockRequested: boolean;
+      cleaningType: string;
+    }) => postJson<{ total: number; breakdown: any }>(`${API_BASE}/host/bookings/quote`, data),
+  });
+}
+
+export function useBookCleaning() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      propertyId: number;
+      guestName?: string;
+      checkIn: string;
+      checkOut: string;
+      squareFeet: number;
+      bedrooms: number;
+      bathrooms: number;
+      hasPets: boolean;
+      restockRequested: boolean;
+      cleaningType: string;
+      specialInstructions?: string;
+      hostNotes?: string;
+      autoMarkPaid: boolean;
+    }) => postJson(`${API_BASE}/host/bookings`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
+export function useMarkBookingPaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId: number) => 
+      postJson(`${API_BASE}/host/bookings/${bookingId}/mark-paid`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
 // ===== CLEANER ROUTES =====
 export function useCleanerJobs() {
   return useQuery({
