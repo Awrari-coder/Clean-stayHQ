@@ -39,6 +39,19 @@ async function patchJson<T>(url: string, data: any): Promise<T> {
   return res.json();
 }
 
+async function putJson<T>(url: string, data: any): Promise<T> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { 
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // ===== USERS =====
 export function useUsers() {
   return useQuery<User[]>({
@@ -103,6 +116,37 @@ export function useCreateBooking() {
       amount: number;
       specialInstructions?: string;
     }) => postJson(`${API_BASE}/host/bookings`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
+    },
+  });
+}
+
+export function useBookingDetails(bookingId: number | null) {
+  return useQuery({
+    queryKey: ["host", "bookings", bookingId],
+    queryFn: () => fetchJson<any>(`${API_BASE}/host/bookings/${bookingId}`),
+    enabled: !!bookingId,
+  });
+}
+
+export function useUpdateBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, data }: { bookingId: number; data: any }) => 
+      putJson(`${API_BASE}/host/bookings/${bookingId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
+    },
+  });
+}
+
+export function useScheduleCleaning() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, cleaningType }: { bookingId: number; cleaningType: string }) => 
+      postJson(`${API_BASE}/host/bookings/${bookingId}/schedule-cleaning`, { cleaningType }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["host", "bookings"] });
       queryClient.invalidateQueries({ queryKey: ["host", "stats"] });
@@ -297,19 +341,6 @@ export function useCleanerAvailability() {
     queryKey: ["cleaner", "availability"],
     queryFn: () => fetchJson<any[]>(`${API_BASE}/cleaner/availability`),
   });
-}
-
-async function putJson<T>(url: string, data: any): Promise<T> {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { 
-      "Content-Type": "application/json",
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
 }
 
 export function useUpdateAvailability() {

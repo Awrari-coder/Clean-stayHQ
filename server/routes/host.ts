@@ -342,4 +342,179 @@ router.get("/sync-logs", async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/host/bookings/:id - Get a specific booking with details
+router.get("/bookings/:id", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const booking = await storage.getBooking(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    // Verify the booking belongs to this host's property
+    const property = await storage.getProperty(booking.propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this booking" });
+    }
+    
+    // Get associated cleaning jobs
+    const jobs = await storage.getJobsByBookingId(bookingId);
+    
+    res.json({
+      ...booking,
+      propertyName: property.name,
+      propertyAddress: property.address,
+      cleaningJobs: jobs,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch booking" });
+  }
+});
+
+// PUT /api/host/bookings/:id - Update a booking
+router.put("/bookings/:id", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const booking = await storage.getBooking(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    // Verify the booking belongs to this host's property
+    const property = await storage.getProperty(booking.propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this booking" });
+    }
+    
+    const { guestName, checkIn, checkOut, amount, specialInstructions, hostNotes, cleaningType, checkInChecklist, checkOutChecklist } = req.body;
+    
+    // Whitelist only editable fields
+    const updateData: any = {};
+    if (guestName !== undefined) updateData.guestName = guestName;
+    if (checkIn !== undefined) updateData.checkIn = new Date(checkIn);
+    if (checkOut !== undefined) updateData.checkOut = new Date(checkOut);
+    if (amount !== undefined) updateData.amount = amount.toString();
+    if (specialInstructions !== undefined) updateData.specialInstructions = specialInstructions;
+    if (hostNotes !== undefined) updateData.hostNotes = hostNotes;
+    if (cleaningType !== undefined) updateData.cleaningType = cleaningType;
+    if (checkInChecklist !== undefined) updateData.checkInChecklist = checkInChecklist;
+    if (checkOutChecklist !== undefined) updateData.checkOutChecklist = checkOutChecklist;
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+    
+    const updated = await storage.updateBooking(bookingId, updateData);
+    
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: req.user!.id,
+      roleScope: "host",
+      type: "booking.updated",
+      message: `Booking for ${updated?.guestName || guestName} has been updated`,
+      metadata: { bookingId },
+    });
+    
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update booking" });
+  }
+});
+
+// POST /api/host/bookings/:id/schedule-cleaning - Schedule cleaning for a booking
+router.post("/bookings/:id/schedule-cleaning", async (req: AuthRequest, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const booking = await storage.getBooking(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    
+    // Verify the booking belongs to this host's property
+    const property = await storage.getProperty(booking.propertyId);
+    if (!property || property.hostId !== req.user!.id) {
+      return res.status(403).json({ error: "You don't have access to this booking" });
+    }
+    
+    const { cleaningType } = req.body;
+    
+    if (!cleaningType || !['post_checkout', 'pre_checkout', 'round_trip'].includes(cleaningType)) {
+      return res.status(400).json({ error: "Invalid cleaning type. Must be post_checkout, pre_checkout, or round_trip" });
+    }
+    
+    // Update booking with cleaning type
+    await storage.updateBooking(bookingId, { cleaningType });
+    
+    // Get existing jobs for this booking
+    const existingJobs = await storage.getJobsByBookingId(bookingId);
+    
+    // Default payout amount (could be configured per property)
+    const defaultPayout = "75.00";
+    
+    // Create cleaning jobs based on type
+    const createdJobs: any[] = [];
+    
+    if (cleaningType === 'pre_checkout' || cleaningType === 'round_trip') {
+      // Check if pre-checkout job already exists
+      const hasPreCheckout = existingJobs.some((j: any) => j.jobType === 'pre_checkout');
+      if (!hasPreCheckout) {
+        const preJob = await storage.createCleanerJob({
+          bookingId,
+          status: "unassigned",
+          jobType: "pre_checkout",
+          payoutAmount: defaultPayout,
+          scheduledDate: new Date(booking.checkOut.getTime() - 3 * 60 * 60 * 1000), // 3 hours before checkout
+        });
+        createdJobs.push(preJob);
+      }
+    }
+    
+    if (cleaningType === 'post_checkout' || cleaningType === 'round_trip') {
+      // Check if post-checkout job already exists
+      const hasPostCheckout = existingJobs.some((j: any) => j.jobType === 'post_checkout');
+      if (!hasPostCheckout) {
+        const postJob = await storage.createCleanerJob({
+          bookingId,
+          status: "unassigned",
+          jobType: "post_checkout",
+          payoutAmount: defaultPayout,
+          scheduledDate: booking.checkOut,
+        });
+        createdJobs.push(postJob);
+      }
+    }
+    
+    // Update booking cleaning status
+    await storage.updateBookingStatus(bookingId, booking.status, "scheduled");
+    
+    // Auto-assign cleaners to new jobs
+    const assignedCount = await assignCleanersToBookings();
+    
+    logActivity({
+      userId: req.user!.id,
+      targetUserId: req.user!.id,
+      roleScope: "host",
+      type: "cleaning.scheduled",
+      message: `${cleaningType.replace('_', '-')} cleaning scheduled for ${booking.guestName}`,
+      metadata: { bookingId, cleaningType, jobsCreated: createdJobs.length },
+    });
+    
+    res.json({
+      success: true,
+      cleaningType,
+      jobsCreated: createdJobs.length,
+      jobsAssigned: assignedCount,
+      jobs: createdJobs,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to schedule cleaning" });
+  }
+});
+
 export default router;

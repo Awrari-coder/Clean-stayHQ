@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings, Plus } from "lucide-react";
+import { Calendar, DollarSign, Home, CheckCircle, ArrowUpRight, Loader2, User, Settings, Plus, Eye } from "lucide-react";
 import { useHostBookings, useHostStats, useHostSync, useHostProperties, useCreateBooking } from "@/hooks/useApi";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { HostCalendarSettings } from "@/components/HostCalendarSettings";
 import { HostPropertiesManager } from "@/components/HostPropertiesManager";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { BookingManager } from "@/components/BookingManager";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,8 @@ function BookingsSection() {
   const { data: properties = [] } = useHostProperties();
   const createBooking = useCreateBooking();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
+  const [managerOpen, setManagerOpen] = useState(false);
   const [formData, setFormData] = useState({
     propertyId: "",
     guestName: "",
@@ -33,6 +36,11 @@ function BookingsSection() {
     amount: "",
     specialInstructions: "",
   });
+
+  const handleOpenBooking = (bookingId: number) => {
+    setSelectedBookingId(bookingId);
+    setManagerOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,11 +182,17 @@ function BookingsSection() {
                   <TableHead>Status</TableHead>
                   <TableHead>Cleaning</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {bookings.map((booking: any) => (
-                  <TableRow key={booking.id} data-testid={`row-booking-${booking.id}`}>
+                  <TableRow 
+                    key={booking.id} 
+                    data-testid={`row-booking-${booking.id}`}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleOpenBooking(booking.id)}
+                  >
                     <TableCell className="font-medium">{booking.guest_name}</TableCell>
                     <TableCell>{booking.property_name}</TableCell>
                     <TableCell>{format(new Date(booking.check_in), 'MMM dd, yyyy')}</TableCell>
@@ -197,6 +211,11 @@ function BookingsSection() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">${booking.amount}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" data-testid={`button-view-booking-${booking.id}`}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -204,6 +223,17 @@ function BookingsSection() {
           )}
         </CardContent>
       </Card>
+      
+      <BookingManager 
+        bookingId={selectedBookingId}
+        open={managerOpen}
+        onOpenChange={(open) => {
+          setManagerOpen(open);
+          if (!open) {
+            refetch();
+          }
+        }}
+      />
     </div>
   );
 }

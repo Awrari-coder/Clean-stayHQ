@@ -8,6 +8,8 @@ export const cleaningStatusEnum = pgEnum('cleaning_status', ['pending', 'schedul
 export const jobStatusEnum = pgEnum('job_status', ['unassigned', 'assigned', 'accepted', 'in-progress', 'completed']);
 export const paymentTypeEnum = pgEnum('payment_type', ['deposit', 'payout']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'completed', 'failed']);
+export const cleaningTypeEnum = pgEnum('cleaning_type', ['post_checkout', 'pre_checkout', 'round_trip']);
+export const jobTypeEnum = pgEnum('job_type', ['post_checkout', 'pre_checkout']);
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -53,8 +55,12 @@ export const bookings = pgTable('bookings', {
   checkOut: timestamp('check_out').notNull(),
   status: bookingStatusEnum('status').notNull().default('confirmed'),
   cleaningStatus: cleaningStatusEnum('cleaning_status').notNull().default('pending'),
+  cleaningType: cleaningTypeEnum('cleaning_type').notNull().default('post_checkout'),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   specialInstructions: text('special_instructions'),
+  hostNotes: text('host_notes'),
+  checkInChecklist: jsonb('check_in_checklist'),
+  checkOutChecklist: jsonb('check_out_checklist'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -64,6 +70,7 @@ export const cleanerJobs = pgTable('cleaner_jobs', {
   assignedCleanerId: integer('assigned_cleaner_id').references(() => users.id),
   assignedCompanyId: integer('assigned_company_id').references(() => users.id),
   status: jobStatusEnum('status').notNull().default('unassigned'),
+  jobType: jobTypeEnum('job_type').notNull().default('post_checkout'),
   payoutAmount: decimal('payout_amount', { precision: 10, scale: 2 }).notNull(),
   scheduledDate: timestamp('scheduled_date').notNull(),
   checklist: jsonb('checklist'),

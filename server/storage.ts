@@ -65,7 +65,9 @@ export interface IStorage {
   getBookingsForHost(hostId: number): Promise<(Booking & { propertyName?: string })[]>;
   getAllBookingsWithDetails(): Promise<any[]>;
   createBooking(booking: InsertBooking): Promise<Booking>;
+  updateBooking(id: number, data: Partial<InsertBooking>): Promise<Booking | undefined>;
   updateBookingStatus(id: number, status: string, cleaningStatus?: string): Promise<Booking | undefined>;
+  getJobsByBookingId(bookingId: number): Promise<CleanerJob[]>;
   
   // Cleaner Jobs
   getCleanerJob(id: number): Promise<CleanerJob | undefined>;
@@ -260,8 +262,12 @@ export class DatabaseStorage implements IStorage {
       checkOut: bookings.checkOut,
       status: bookings.status,
       cleaningStatus: bookings.cleaningStatus,
+      cleaningType: bookings.cleaningType,
       amount: bookings.amount,
       specialInstructions: bookings.specialInstructions,
+      hostNotes: bookings.hostNotes,
+      checkInChecklist: bookings.checkInChecklist,
+      checkOutChecklist: bookings.checkOutChecklist,
       createdAt: bookings.createdAt,
       propertyName: properties.name,
     })
@@ -311,6 +317,18 @@ export class DatabaseStorage implements IStorage {
     return booking || undefined;
   }
 
+  async updateBooking(id: number, data: Partial<InsertBooking>): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings)
+      .set(data)
+      .where(eq(bookings.id, id))
+      .returning();
+    return booking || undefined;
+  }
+
+  async getJobsByBookingId(bookingId: number): Promise<CleanerJob[]> {
+    return await db.select().from(cleanerJobs).where(eq(cleanerJobs.bookingId, bookingId));
+  }
+
   // Cleaner Jobs
   async getCleanerJob(id: number): Promise<CleanerJob | undefined> {
     const [job] = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, id));
@@ -324,6 +342,7 @@ export class DatabaseStorage implements IStorage {
       assignedCleanerId: cleanerJobs.assignedCleanerId,
       assignedCompanyId: cleanerJobs.assignedCompanyId,
       status: cleanerJobs.status,
+      jobType: cleanerJobs.jobType,
       payoutAmount: cleanerJobs.payoutAmount,
       scheduledDate: cleanerJobs.scheduledDate,
       checklist: cleanerJobs.checklist,
@@ -349,6 +368,7 @@ export class DatabaseStorage implements IStorage {
       assignedCleanerId: cleanerJobs.assignedCleanerId,
       assignedCompanyId: cleanerJobs.assignedCompanyId,
       status: cleanerJobs.status,
+      jobType: cleanerJobs.jobType,
       payoutAmount: cleanerJobs.payoutAmount,
       scheduledDate: cleanerJobs.scheduledDate,
       checklist: cleanerJobs.checklist,
