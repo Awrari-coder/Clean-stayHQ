@@ -8,7 +8,8 @@ export const cleaningStatusEnum = pgEnum('cleaning_status', ['pending', 'schedul
 export const jobStatusEnum = pgEnum('job_status', ['unassigned', 'assigned', 'accepted', 'in-progress', 'completed']);
 export const paymentTypeEnum = pgEnum('payment_type', ['deposit', 'payout']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'completed', 'failed']);
-export const cleaningTypeEnum = pgEnum('cleaning_type', ['post_checkout', 'pre_checkout', 'round_trip']);
+export const cleaningTypeEnum = pgEnum('cleaning_type', ['post_checkout', 'pre_checkout', 'round_trip', 'on_demand']);
+export const bookingPaymentStatusEnum = pgEnum('booking_payment_status', ['pending', 'paid', 'failed', 'refunded']);
 export const jobTypeEnum = pgEnum('job_type', ['post_checkout', 'pre_checkout']);
 
 export const users = pgTable('users', {
@@ -61,6 +62,16 @@ export const bookings = pgTable('bookings', {
   hostNotes: text('host_notes'),
   checkInChecklist: jsonb('check_in_checklist'),
   checkOutChecklist: jsonb('check_out_checklist'),
+  squareFeet: integer('square_feet'),
+  bedrooms: integer('bedrooms'),
+  bathrooms: integer('bathrooms'),
+  hasPets: boolean('has_pets').notNull().default(false),
+  restockRequested: boolean('restock_requested').notNull().default(false),
+  quoteAmount: decimal('quote_amount', { precision: 10, scale: 2 }),
+  quoteBreakdown: jsonb('quote_breakdown'),
+  paymentStatus: bookingPaymentStatusEnum('payment_status').notNull().default('pending'),
+  paymentReference: text('payment_reference'),
+  paymentProvider: text('payment_provider'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

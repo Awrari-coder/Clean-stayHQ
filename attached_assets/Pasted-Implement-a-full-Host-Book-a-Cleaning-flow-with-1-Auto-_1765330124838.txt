@@ -1,0 +1,336 @@
+Implement a full Host “Book a Cleaning” flow with:
+
+1) Auto quote calculator (based on property size/features)
+2) Manual booking creation UI for hosts
+3) Booking → payment status handling
+4) Payment trigger events:
+   - Email confirmation to host
+   - Job creation + assignment workflow
+   - Notifications to admin / cleaner (using existing notification system)
+
+Use existing stack:
+- Node/Express
+- Neon PostgreSQL (DATABASE_URL already configured)
+- Drizzle/Prisma
+- JWT roles (host, cleaner, admin, cleaning_company)
+- Existing tables: users, properties, bookings, cleaner_jobs, payments
+- Existing notification + job assignment logic where possible.
+
+====================================================
+A) DATABASE CHANGES
+====================================================
+
+Extend `bookings` table with new columns (if not already present):
+
+- cleaning_type TEXT NOT NULL DEFAULT 'post_checkout'
+  -- allowed values for now: 'post_checkout' | 'pre_checkout' | 'round_trip' | 'on_demand'
+
+- square_feet INTEGER NULL
+- bedrooms INTEGER NULL
+- bathrooms INTEGER NULL
+
+- has_pets BOOLEAN NOT NULL DEFAULT false
+- restock_requested BOOLEAN NOT NULL DEFAULT false
+
+- quote_amount NUMERIC(10,2) NULL
+- quote_breakdown JSONB NULL
+
+- payment_status TEXT NOT NULL DEFAULT 'pending'
+  -- 'pending' | 'paid' | 'failed' | 'refunded'
+
+- payment_reference TEXT NULL
+- payment_provider TEXT NULL   -- e.g. 'manual', 'stripe' (future)
+
+Add migration + Drizzle/Prisma model updates accordingly.
+
+====================================================
+B) QUOTE ENGINE SERVICE
+====================================================
+
+Create: `/server/services/quoteService.ts`
+
+Export function:
+
+`export function calculateCleaningQuote(input): { total: number; breakdown: any }`
+
+Input shape:
+
+{
+  squareFeet: number;
+  bedrooms: number;
+  bathrooms: number;
+  hasPets: boolean;
+  restockRequested: boolean;
+  cleaningType: 'post_checkout' | 'pre_checkout' | 'round_trip' | 'on_demand';
+}
+
+Logic (constants at top of file so they’re easy to tweak):
+
+- BASE_RATE_PER_SQFT = 0.10
+- BATHROOM_FEE = 20
+- BEDROOM_FEE = 15
+- PET_FEE = 25
+- RESTOCK_FEE = 15
+
+Algorithm:
+
+base = squareFeet * BASE_RATE_PER_SQFT
++ bathrooms * BATHROOM_FEE
++ bedrooms * BEDROOM_FEE
++ (hasPets ? PET_FEE : 0)
++ (restockRequested ? RESTOCK_FEE : 0)
+
+If cleaningType = 'round_trip', apply multiplier:
+- total = base * 1.6 (for example; configurable)
+
+Return:
+
+{
+  total,
+  breakdown: {
+    baseFromSqft,
+    bathroomsFee,
+    bedroomsFee,
+    petFee,
+    restockFee,
+    cleaningTypeMultiplier
+  }
+}
+
+====================================================
+C) BACKEND: HOST BOOKING CREATION + PAYMENT
+====================================================
+
+Base path: `/api/host`
+Require role = 'host'.
+
+1) POST `/api/host/bookings/quote`
+
+Body:
+{
+  "propertyId": number,
+  "squareFeet": number,
+  "bedrooms": number,
+  "bathrooms": number,
+  "hasPets": boolean,
+  "restockRequested": boolean,
+  "cleaningType": string
+}
+
+Behavior:
+- Validate property belongs to host (properties.host_id = req.user.id).
+- Call calculateCleaningQuote().
+- Return { total, breakdown } without writing to DB.
+
+This is used for live quote preview in the UI.
+
+2) POST `/api/host/bookings`
+
+Body:
+{
+  "propertyId": number,
+  "guestName": string,
+  "checkIn": string (ISO),
+  "checkOut": string (ISO),
+  "squareFeet": number,
+  "bedrooms": number,
+  "bathrooms": number,
+  "hasPets": boolean,
+  "restockRequested": boolean,
+  "cleaningType": string,
+  "specialInstructions"?: string,
+  "hostNotes"?: string,
+  "autoMarkPaid"?: boolean   // for MVP manual payment simulation
+}
+
+Behavior:
+
+- Validate property belongs to host.
+- Compute quote using quoteService.
+- Insert row into bookings with:
+
+  property_id, guest_name, check_in, check_out,
+  cleaning_type, square_feet, bedrooms, bathrooms,
+  has_pets, restock_requested,
+  quote_amount = total,
+  quote_breakdown = breakdown,
+  status = 'confirmed',
+  cleaning_status = 'pending',
+  payment_status = autoMarkPaid ? 'paid' : 'pending',
+  special_instructions, host_notes.
+
+- If autoMarkPaid == true:
+    - Immediately create a cleaner_jobs row (using existing job creation logic for bookings)
+    - Trigger notifications / events (see section E).
+
+- If autoMarkPaid == false:
+    - Do NOT create job yet (we wait until payment is confirmed).
+
+- Return the created booking (id, quote_amount, payment_status).
+
+3) POST `/api/host/bookings/:id/mark-paid`
+
+For now, simulate payment completion (Stripe integration later).
+
+- Validate booking belongs to host.
+- Set payment_status = 'paid', payment_provider = 'manual', payment_reference = 'HOST_MARKED_PAID'.
+- Create job for this booking if not already created:
+
+  - Use existing job creation / scheduler path if available.
+  - Otherwise, create a cleaner_jobs row with:
+    - booking_id = booking.id
+    - status = 'unassigned' (admin/scheduler will assign)
+    - scheduled_date = booking.check_out (for standard post_checkout)
+    - payout_amount = some percentage of quote (e.g. 60% of quote_amount).
+
+- Trigger notification + events logic (see section E).
+- Return updated booking + job.
+
+====================================================
+D) FRONTEND: HOST “BOOK A CLEANING” UI
+====================================================
+
+1) On Host Bookings page (`/host/bookings`), add a prominent button:
+
+`+ Book a Cleaning`
+
+2) When clicked, open a modal:
+
+Fields:
+
+- Property (dropdown of host properties)
+- Cleaning type (options: Post-Checkout, Pre-Checkout, Round Trip, On-Demand)
+- Date / time:
+  - For now, allow selecting Check-In and Check-Out (or just a single cleaning datetime field).
+  - Minimal: cleaning date/time; we can set checkIn/checkOut = cleaningDate +/- few hours.
+
+- Size & details:
+  - Square feet
+  - Bedrooms
+  - Bathrooms
+  - Pets? (checkbox)
+  - Restock supplies? (checkbox)
+
+- Guest info:
+  - Guest name (optional)
+
+- Notes:
+  - Special instructions
+  - Host notes (private)
+
+On changes to the size & flags / cleaning type:
+- Call `/api/host/bookings/quote` to get updated quote.
+- Display:
+
+  “Estimated Cleaning Price: $XXX.xx”
+  With a small text showing breakdown lines.
+
+Buttons:
+
+- [Create Booking & Mark Paid]  (for now; immediate job creation)
+- [Create Booking (Pay Later)] (creates booking with payment_status=pending; job waits)
+
+POST:
+
+- To `/api/host/bookings` with autoMarkPaid = true or false depending on chosen button.
+
+After success:
+- Close modal.
+- Show toast “Cleaning booked successfully”.
+- Refresh bookings list.
+
+3) Display new host-created cleaning bookings in the bookings list:
+
+- Show as normal bookings, but with an indicator:
+  - Maybe label “Manual Cleaning” or “On-Demand Cleaning”.
+- Show payment_status:
+  - paid / pending (badge).
+- Show “Schedule” or assigned status in Cleaning column.
+
+Also allow opening existing Booking Details modal to edit notes, view cleaning schedule, see checklists as needed.
+
+====================================================
+E) EVENTS & NOTIFICATIONS AFTER PAYMENT
+====================================================
+
+Tie into existing notification / job assignment system.
+
+When:
+
+- `/api/host/bookings` is called with autoMarkPaid=true
+OR
+- `/api/host/bookings/:id/mark-paid` is called and sets payment_status='paid'
+
+Then:
+
+1) Ensure a job exists for that booking (create if needed).
+2) Emit events (if event system is in place) or directly call notification methods:
+
+- Email to host via Resend:
+  - Subject: "Your cleaning has been scheduled"
+  - Include property name, date/time, quote_amount, cleaning type.
+
+- Notification to admin:
+  - Either via Twilio SMS (optional) or activity log.
+  - Message: "New paid cleaning booking from <host_name> for <property_name>."
+
+- If auto-assignment scheduler exists:
+  - Attempt to auto-assign a cleaner.
+  - If assigned:
+    - Notify cleaner via SMS/Email.
+  - If not assigned:
+    - Mark job as unassigned and show in admin Demand view.
+
+3) Create `payments` entry:
+
+- For now, on mark-paid:
+  - Insert row into payments:
+    - user_id = hostId
+    - job_id = job.id
+    - type = 'deposit'
+    - amount = booking.quote_amount
+    - status = 'completed'
+    - description = 'Cleaning booking for property <name>'
+
+This keeps your revenue/payout logic consistent.
+
+====================================================
+F) OPTIONAL: GOOGLE ADDRESS ASSIST (PREP STUBS)
+====================================================
+
+For now, just prepare structure (we can integrate keys later):
+
+- In property creation/edit modal, plan for address autocomplete:
+  - Add fields to accept “full address” plus structured parts.
+  - Add placeholder text: “Address autocomplete coming soon – please enter full address.”
+
+- Abstract address parsing into a helper so when Google Places is integrated, we only replace that piece.
+
+====================================================
+G) TESTING SCENARIOS
+====================================================
+
+1) Log in as host (sarah@example.com).
+   - Click “+ Book a Cleaning”.
+   - Select one of the existing properties.
+   - Enter: 1200 sqft, 2 bedrooms, 2 bathrooms, hasPets = true, restockRequested = true.
+   - Verify quote updates when fields change.
+   - Click “Create Booking & Mark Paid”.
+   - Confirm:
+      - Booking appears in list with correct amount and payment_status='paid'.
+      - Job exists in cleaner_jobs for that booking.
+      - Cleaner dashboard shows new job.
+      - Admin Demand view shows new entry.
+      - Notifications (if Twilio/Resend configured) are triggered or at least logged.
+
+2) Create booking with Pay Later:
+   - Payment_status should be 'pending'.
+   - No job yet.
+   - Admin or Host uses `/mark-paid` (via a button we can add later).
+   - Job is created + notifications fired.
+
+Provide a summary of:
+- New tables/columns
+- New routes
+- New React components/pages added
+- How to manually test the full host booking flow end to end.
